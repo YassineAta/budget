@@ -156,7 +156,7 @@ export default function Dashboard({ onTabChange }) {
                         color={bufferGoal.saved >= bufferGoal.target ? 'green' : bufferGoal.saved / bufferGoal.target > 0.5 ? 'yellow' : 'red'}
                     />
                     <div className="card-sub mt-8">
-                        {bufferGoal.saved >= bufferGoal.target
+                        {bufferGoal.target > 0 && bufferGoal.saved >= bufferGoal.target
                             ? <span className="text-green">✅ {safetyMonths}-month buffer full — expanding to {safetyMonths + 1} months next income</span>
                             : <span style={{ color: 'var(--red)' }}>⚠️ {(bufferGoal.target - bufferGoal.saved).toLocaleString()} {cur} needed to reach {safetyMonths}-month target</span>
                         }
