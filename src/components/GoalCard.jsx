@@ -149,16 +149,14 @@ export default function GoalCard({ goal, compact = false }) {
                         </div>
                     )}
 
-                    {!isFunded && (
-                        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-                            <button className="btn btn-sm btn-primary" onClick={() => setMode('fund')}>+ Fund</button>
-                            {goal.saved > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setMode('withdraw')}>− Withdraw</button>}
-                            <button className="btn btn-sm btn-ghost" onClick={() => setMode('edit')} style={{ marginLeft: goal.saved > 0 ? 0 : 'auto' }}>✏️ Edit</button>
-                            {!goal.isBuffer && !goal.isRecurring && (
-                                <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: 'DELETE_GOAL', id: goal.id })} style={{ marginLeft: 'auto' }}>✕</button>
-                            )}
-                        </div>
-                    )}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                        {!isFunded && <button className="btn btn-sm btn-primary" onClick={() => setMode('fund')}>+ Fund</button>}
+                        {goal.saved > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setMode('withdraw')}>− Withdraw</button>}
+                        <button className="btn btn-sm btn-ghost" onClick={() => setMode('edit')} style={{ marginLeft: goal.saved > 0 ? 0 : 'auto' }}>✏️ Edit</button>
+                        {!goal.isBuffer && !goal.isRecurring && (
+                            <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: 'DELETE_GOAL', id: goal.id })} style={{ marginLeft: 'auto' }}>✕</button>
+                        )}
+                    </div>
                 </>
             ) : (
                 <form onSubmit={handleEdit}>
