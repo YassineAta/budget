@@ -27,10 +27,22 @@ export function monthlyEssentials(state) {
 export function getMonthlySaving(goal) {
   if (!goal.targetDate || goal.saved >= goal.target) return null;
   const now = new Date();
-  const target = new Date(goal.targetDate + '-01');
-  const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
-  if (months <= 0) return { needed: goal.target - goal.saved, months: 0, status: 'overdue' };
-  return { needed: Math.ceil((goal.target - goal.saved) / months), months, status: 'active' };
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const targetDateObj = new Date(goal.targetDate + '-01');
+
+  const monthsDiff = (targetDateObj.getFullYear() - currentMonth.getFullYear()) * 12 + (targetDateObj.getMonth() - currentMonth.getMonth());
+
+  if (monthsDiff < 0) {
+    return { needed: goal.target - goal.saved, months: 0, status: 'overdue' };
+  }
+
+  if (monthsDiff === 0) {
+    return { needed: goal.target - goal.saved, months: 0, status: 'due-now' };
+  }
+
+  // monthsDiff 1 means target is next month. We have this month and next month (2 installments).
+  const installments = monthsDiff + 1;
+  return { needed: Math.ceil((goal.target - goal.saved) / installments), months: installments, status: 'active' };
 }
 
 // ─── Auto-top-up calculation ──────────────────────────────────────────────────
@@ -138,7 +150,17 @@ function reducer(state, action) {
       break;
 
     case 'EDIT_GOAL':
-      next = { ...base, goals: base.goals.map(g => g.id === action.id ? { ...g, ...action.updates } : g) };
+      next = {
+        ...base,
+        goals: base.goals.map(g => g.id === action.id ? {
+          ...g,
+          ...action.updates,
+          // Re-calculate monthly cost if it's recurring and monthlyCost wasn't explicitly updated
+          monthlyCost: (action.updates.isRecurring || g.isRecurring)
+            ? (action.updates.monthlyCost ?? g.monthlyCost ?? action.updates.target ?? g.target)
+            : 0
+        } : g)
+      };
       break;
 
     case 'DELETE_GOAL':
