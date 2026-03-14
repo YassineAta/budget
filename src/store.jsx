@@ -132,7 +132,9 @@ function reducer(state, action) {
     case 'FUND_GOAL': {
       const goal = base.goals.find(g => g.id === action.id);
       if (!goal) return base;
-      const amt = Math.min(action.amount, base.cash, goal.target - goal.saved);
+      const amt = goal.isBuffer
+        ? Math.min(action.amount, base.cash)
+        : Math.min(action.amount, base.cash, goal.target - goal.saved);
       next = {
         ...base,
         cash: base.cash - amt,
@@ -157,7 +159,9 @@ function reducer(state, action) {
       const from = base.goals.find(g => g.id === action.fromId);
       const to = base.goals.find(g => g.id === action.toId);
       if (!from || !to) return base;
-      const amt = Math.min(action.amount, from.saved, to.target - to.saved);
+      const amt = to.isBuffer
+        ? Math.min(action.amount, from.saved)
+        : Math.min(action.amount, from.saved, to.target - to.saved);
       next = {
         ...base,
         goals: base.goals.map(g => {
@@ -246,7 +250,12 @@ function reducer(state, action) {
     }
 
     case 'SET_BUFFER_MAX':
-      next = { ...base, bufferMaxMonths: Math.max(base.safetyMonths, action.value) };
+      // The user can freely choose the ceiling. If the current safety months is higher, we cap safety months.
+      next = {
+        ...base,
+        bufferMaxMonths: action.value,
+        safetyMonths: Math.min(base.safetyMonths, action.value)
+      };
       break;
 
     case 'SET_MONTHLY_BUDGET':

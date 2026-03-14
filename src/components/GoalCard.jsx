@@ -194,7 +194,7 @@ export default function GoalCard({ goal, compact = false }) {
                         placeholder="Amount"
                         value={fundAmt}
                         onChange={e => setFundAmt(e.target.value)}
-                        max={Math.min(remaining, cash)}
+                        max={goal.isBuffer ? cash : Math.min(remaining, cash)}
                         autoFocus
                     />
                     <button className="btn btn-sm btn-primary" type="submit">Add</button>
