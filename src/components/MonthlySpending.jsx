@@ -27,12 +27,12 @@ export default function MonthlySpending() {
                         ? <button className="btn btn-sm btn-ghost" onClick={() => setIsEditing(true)}>Edit</button>
                         : <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn btn-sm btn-primary" onClick={() => { dispatch({ type: 'SET_MONTHLY_BUDGET', value: parseFloat(newBudget) || 200 }); setIsEditing(false); }}>Save</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => setIsEditing(false)}>✕</button>
+                            <button className="btn btn-sm btn-ghost" aria-label="Cancel Edit" onClick={() => setIsEditing(false)}>✕</button>
                         </div>
                     }
                 </div>
                 {isEditing
-                    ? <div className="input-row mt-8"><input type="number" value={newBudget} onChange={e => setNewBudget(e.target.value)} /><span className="text-muted">{cur}</span></div>
+                    ? <div className="input-row mt-8"><input type="number" aria-label="Monthly Budget" value={newBudget} onChange={e => setNewBudget(e.target.value)} /><span className="text-muted">{cur}</span></div>
                     : <div className="card-value">{monthly.budget.toLocaleString()} {cur}</div>
                 }
                 <div className="card-sub">This amount drives the buffer target. Changing it updates the buffer target instantly.</div>
@@ -74,9 +74,9 @@ export default function MonthlySpending() {
                     setExpenseName(''); setExpenseAmt('');
                 }}>
                     <div className="input-row">
-                        <input type="text" placeholder="Item (e.g. Groceries)" value={expenseName} onChange={e => setExpenseName(e.target.value)} />
-                        <input type="number" placeholder="Amt" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} min="0" style={{ maxWidth: 100 }} />
-                        <button className="btn btn-primary" type="submit">+</button>
+                        <input type="text" aria-label="Expense Item" placeholder="Item (e.g. Groceries)" value={expenseName} onChange={e => setExpenseName(e.target.value)} />
+                        <input type="number" aria-label="Expense Amount" placeholder="Amt" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} min="0" style={{ maxWidth: 100 }} />
+                        <button className="btn btn-primary" aria-label="Add Expense" type="submit">+</button>
                     </div>
                 </form>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
@@ -102,7 +102,7 @@ export default function MonthlySpending() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                 <span style={{ fontWeight: 700 }}>{exp.amount} {cur}</span>
-                                <button className="btn btn-sm btn-ghost" onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })} style={{ color: 'var(--red)', padding: '2px 6px' }}>✕</button>
+                                <button className="btn btn-sm btn-ghost" aria-label="Delete Expense" onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })} style={{ color: 'var(--red)', padding: '2px 6px' }}>✕</button>
                             </div>
                         </div>
                     ))

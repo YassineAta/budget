@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore } from '../store';
 import GoalCard from './GoalCard';
 
@@ -34,29 +34,34 @@ export default function GoalsList() {
     const [moveAmt, setMoveAmt] = useState('');
 
     // Sort goals
-    const sorted = [...goals].sort((a, b) => {
-        // Buffer always first
-        if (a.isBuffer) return -1;
-        if (b.isBuffer) return 1;
+    const sorted = useMemo(() => {
+        console.time('GoalsList:sort');
+        const res = [...goals].sort((a, b) => {
+            // Buffer always first
+            if (a.isBuffer) return -1;
+            if (b.isBuffer) return 1;
 
-        if (sort === 'priority') {
-            return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-        }
-        if (sort === 'funded') {
-            const pctA = a.target > 0 ? a.saved / a.target : 0;
-            const pctB = b.target > 0 ? b.saved / b.target : 0;
-            return pctB - pctA; // highest funded first
-        }
-        if (sort === 'deadline') {
-            if (!a.targetDate && !b.targetDate) return 0;
-            if (!a.targetDate) return 1;
-            if (!b.targetDate) return -1;
-            return a.targetDate.localeCompare(b.targetDate);
-        }
-        return 0;
-    });
+            if (sort === 'priority') {
+                return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+            }
+            if (sort === 'funded') {
+                const pctA = a.target > 0 ? a.saved / a.target : 0;
+                const pctB = b.target > 0 ? b.saved / b.target : 0;
+                return pctB - pctA; // highest funded first
+            }
+            if (sort === 'deadline') {
+                if (!a.targetDate && !b.targetDate) return 0;
+                if (!a.targetDate) return 1;
+                if (!b.targetDate) return -1;
+                return a.targetDate.localeCompare(b.targetDate);
+            }
+            return 0;
+        });
+        console.timeEnd('GoalsList:sort');
+        return res;
+    }, [goals, sort]);
 
-    const totalAllocated = goals.reduce((s, g) => s + g.saved, 0);
+    const totalAllocated = useMemo(() => goals.reduce((s, g) => s + g.saved, 0), [goals]);
 
     function handleAdd(e) {
         e.preventDefault();
@@ -87,7 +92,9 @@ export default function GoalsList() {
         setShowMove(false);
     }
 
-    const goalsWithSaved = goals.filter(g => g.saved > 0);
+    const goalsWithSaved = useMemo(() => goals.filter(g => g.saved > 0), [goals]);
+
+    console.log('🎯 Render: GoalsList');
 
     return (
         <div>
@@ -200,9 +207,11 @@ export default function GoalsList() {
             </div>
 
             {/* Goal Cards */}
-            {sorted.map(goal => (
-                <GoalCard key={goal.id} goal={goal} />
-            ))}
+            <div className="goals-grid">
+                {sorted.map(goal => (
+                    <GoalCard key={goal.id} goal={goal} />
+                ))}
+            </div>
 
             {goals.length === 0 && (
                 <div className="card">

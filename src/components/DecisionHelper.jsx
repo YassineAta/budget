@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useStore } from '../store';
 
 export default function DecisionHelper({ goal, amount, onClose, onConfirm }) {
@@ -5,54 +6,59 @@ export default function DecisionHelper({ goal, amount, onClose, onConfirm }) {
     const { goals, monthly, cash } = state;
     const cur = state.settings.currency;
 
-    const bufferGoal = goals.find(g => g.isBuffer);
-    const warnings = [];
+    const warnings = useMemo(() => {
+        const res = [];
+        const bufferGoal = goals.find(g => g.isBuffer);
 
-    // Check buffer safety
-    if (bufferGoal && bufferGoal.saved < bufferGoal.target && !goal.isBuffer) {
-        warnings.push({
-            type: 'danger',
-            icon: '🛡️',
-            text: `Your safety buffer is ${(bufferGoal.target - bufferGoal.saved).toLocaleString()} ${cur} below target. Prioritise building your buffer first.`,
-        });
-    }
+        // Check buffer safety
+        if (bufferGoal && bufferGoal.saved < bufferGoal.target && !goal.isBuffer) {
+            res.push({
+                type: 'danger',
+                icon: '🛡️',
+                text: `Your safety buffer is ${(bufferGoal.target - bufferGoal.saved).toLocaleString()} ${cur} below target. Prioritise building your buffer first.`,
+            });
+        }
 
-    // Check if enough cash
-    if (amount > cash) {
-        warnings.push({
-            type: 'danger',
-            icon: '🚨',
-            text: `You don't have enough cash. Available: ${cash.toLocaleString()} ${cur}.`,
-        });
-    }
+        // Check if enough cash
+        if (amount > cash) {
+            res.push({
+                type: 'danger',
+                icon: '🚨',
+                text: `You don't have enough cash. Available: ${cash.toLocaleString()} ${cur}.`,
+            });
+        }
 
-    // Check monthly spending
-    const afterSpend = monthly.spent + amount;
-    if (afterSpend > monthly.budget) {
-        warnings.push({
-            type: 'warning',
-            icon: '📊',
-            text: `Combined with monthly spending, this exceeds your ${monthly.budget.toLocaleString()} ${cur} budget.`,
-        });
-    }
+        // Check monthly spending
+        const afterSpend = monthly.spent + amount;
+        if (afterSpend > monthly.budget) {
+            res.push({
+                type: 'warning',
+                icon: '📊',
+                text: `Combined with monthly spending, this exceeds your ${monthly.budget.toLocaleString()} ${cur} budget.`,
+            });
+        }
 
-    // Check priority
-    if (goal.priority === 'Low') {
-        warnings.push({
-            type: 'warning',
-            icon: '⬇️',
-            text: `This is a low-priority goal. Consider funding higher-priority goals first.`,
-        });
-    }
+        // Check priority
+        if (goal.priority === 'Low') {
+            res.push({
+                type: 'warning',
+                icon: '⬇️',
+                text: `This is a low-priority goal. Consider funding higher-priority goals first.`,
+            });
+        }
 
-    // Positive
-    if (warnings.length === 0) {
-        warnings.push({
-            type: 'success',
-            icon: '✅',
-            text: `This allocation looks safe. Buffer is healthy and you're within budget.`,
-        });
-    }
+        // Positive
+        if (res.length === 0) {
+            res.push({
+                type: 'success',
+                icon: '✅',
+                text: `This allocation looks safe. Buffer is healthy and you're within budget.`,
+            });
+        }
+        return res;
+    }, [goal, amount, goals, monthly, cash, cur]);
+
+    console.log(`🧠 Render: DecisionHelper - ${goal.name}`);
 
     return (
         <div className="modal-overlay" onClick={onClose}>

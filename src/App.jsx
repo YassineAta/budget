@@ -17,18 +17,6 @@ function AppContent() {
 
     return (
         <div className="app">
-            <header className="app-header">
-                <h1>FinPlan</h1>
-                <div className="subtitle">Goal-Based Saving Planner</div>
-            </header>
-
-            <main style={{ paddingTop: 8 }}>
-                {tab === 'dashboard' && <Dashboard onTabChange={setTab} />}
-                {tab === 'spending' && <MonthlySpending />}
-                {tab === 'goals' && <GoalsList />}
-                {tab === 'income' && <IncomeEvents />}
-            </main>
-
             <nav className="tab-bar">
                 {TABS.map(t => (
                     <button
@@ -41,6 +29,20 @@ function AppContent() {
                     </button>
                 ))}
             </nav>
+
+            <div className="app-content-area">
+                <header className="app-header">
+                    <h1>FinPlan</h1>
+                    <div className="subtitle">Goal-Based Saving Planner</div>
+                </header>
+
+                <main style={{ paddingTop: 8 }}>
+                    {tab === 'dashboard' && <Dashboard onTabChange={setTab} />}
+                    {tab === 'spending' && <MonthlySpending />}
+                    {tab === 'goals' && <GoalsList />}
+                    {tab === 'income' && <IncomeEvents />}
+                </main>
+            </div>
         </div>
     );
 }

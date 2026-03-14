@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { useStore, getMonthlySaving } from '../store';
 import ProgressBar from './ProgressBar';
+import { calculateProgress } from '../utils/math';
 
-export default function GoalCard({ goal, compact = false }) {
+const GoalCard = memo(function GoalCard({ goal, compact = false }) {
     const { state, dispatch } = useStore();
     const { cash, settings } = state;
     const cur = settings.currency;
@@ -19,14 +20,15 @@ export default function GoalCard({ goal, compact = false }) {
     const [editDate, setEditDate] = useState(goal.targetDate || '');
     const [editIsRecurring, setEditIsRecurring] = useState(goal.isRecurring || false);
 
-    const remaining = Math.max(0, goal.target - goal.saved);
-    const pct = goal.target > 0 ? Math.round((goal.saved / goal.target) * 100) : 0;
-    const isFunded = remaining <= 0;
-    const plan = getMonthlySaving(goal);
+    const { remaining, pct, isFunded, plan, barColor, pctColor } = useMemo(() => {
+        const progress = calculateProgress(goal.saved, goal.target);
+        return {
+            ...progress,
+            plan: getMonthlySaving(goal)
+        };
+    }, [goal]);
 
-    // Color based on funding
-    const barColor = isFunded ? 'green' : pct >= 50 ? 'yellow' : 'red';
-    const pctColor = isFunded ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+    console.log(`🫀 Render: GoalCard - ${goal.name}`);
 
     function handleFund(e) {
         e.preventDefault();
@@ -154,31 +156,31 @@ export default function GoalCard({ goal, compact = false }) {
                         {goal.saved > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setMode('withdraw')}>− Withdraw</button>}
                         <button className="btn btn-sm btn-ghost" onClick={() => setMode('edit')} style={{ marginLeft: goal.saved > 0 ? 0 : 'auto' }}>✏️ Edit</button>
                         {!goal.isBuffer && !goal.isRecurring && (
-                            <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: 'DELETE_GOAL', id: goal.id })} style={{ marginLeft: 'auto' }}>✕</button>
+                            <button className="btn btn-sm btn-danger" aria-label="Delete goal" onClick={() => dispatch({ type: 'DELETE_GOAL', id: goal.id })} style={{ marginLeft: 'auto' }}>✕</button>
                         )}
                     </div>
                 </>
             ) : (
                 <form onSubmit={handleEdit}>
                     <div className="card-title">Edit Goal</div>
-                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: '100%', marginBottom: 8 }} placeholder="Goal name" />
+                    <input type="text" aria-label="Goal Name" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: '100%', marginBottom: 8 }} placeholder="Goal name" />
                     <div className="input-row">
-                        <input type="number" value={editTarget} onChange={e => setEditTarget(e.target.value)} placeholder="Target amount" />
-                        <select value={editPriority} onChange={e => setEditPriority(e.target.value)}>
+                        <input type="number" aria-label="Target Amount" value={editTarget} onChange={e => setEditTarget(e.target.value)} placeholder="Target amount" />
+                        <select aria-label="Priority" value={editPriority} onChange={e => setEditPriority(e.target.value)}>
                             <option value="High">High</option>
                             <option value="Medium">Medium</option>
                             <option value="Low">Low</option>
                         </select>
                     </div>
                     <div className="input-row mt-8">
-                        <select value={editCategory} onChange={e => setEditCategory(e.target.value)}>
+                        <select aria-label="Category" value={editCategory} onChange={e => setEditCategory(e.target.value)}>
                             <option value="Essential">Essential</option>
                             <option value="Productivity">Productivity</option>
                             <option value="Comfort">Comfort</option>
                             <option value="Education">Education</option>
                             <option value="Luxury">Luxury</option>
                         </select>
-                        <input type="month" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                        <input type="month" aria-label="Target Date" value={editDate} onChange={e => setEditDate(e.target.value)} />
                     </div>
                     {!goal.isBuffer && (
                         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>
@@ -209,7 +211,7 @@ export default function GoalCard({ goal, compact = false }) {
                         autoFocus
                     />
                     <button className="btn btn-sm btn-primary" type="submit">Add</button>
-                    <button className="btn btn-sm btn-ghost" type="button" onClick={() => setMode(null)}>✕</button>
+                    <button className="btn btn-sm btn-ghost" type="button" aria-label="Close" onClick={() => setMode(null)}>✕</button>
                 </form>
             )}
 
@@ -217,9 +219,11 @@ export default function GoalCard({ goal, compact = false }) {
                 <form onSubmit={handleWithdraw} className="input-row mt-12">
                     <input type="number" placeholder="Amount" value={withdrawAmt} onChange={e => setWithdrawAmt(e.target.value)} max={goal.saved} autoFocus />
                     <button className="btn btn-sm btn-danger" type="submit">Back to Cash</button>
-                    <button className="btn btn-sm btn-ghost" type="button" onClick={() => setMode(null)}>✕</button>
+                    <button className="btn btn-sm btn-ghost" type="button" aria-label="Close" onClick={() => setMode(null)}>✕</button>
                 </form>
             )}
         </div>
     );
-}
+});
+
+export default GoalCard;
