@@ -3,7 +3,9 @@ import { useStore } from '../store';
 
 export default function MonthlySpending() {
     const { state, dispatch } = useStore();
-    const { monthly, balance, settings } = state;
+    const { monthly, goals, settings } = state;
+    const bufferGoal = goals.find(g => g.isBuffer);
+    const available = bufferGoal ? bufferGoal.saved : 0;
     const cur = settings.currency;
 
     const [isEditing, setIsEditing] = useState(false);
@@ -39,7 +41,7 @@ export default function MonthlySpending() {
             {/* Current Balance reminder */}
             <div className="card" style={{ background: 'rgba(59,130,246,0.05)', border: '1px dashed rgba(59,130,246,0.3)' }}>
                 <div className="card-title" style={{ fontSize: '0.8rem' }}>💳 Available Balance</div>
-                <div className="card-value" style={{ fontSize: '1.4rem', color: balance < 30 ? 'var(--yellow)' : 'var(--green)' }}>{balance.toLocaleString()} {cur}</div>
+                <div className="card-value" style={{ fontSize: '1.4rem', color: available < 30 ? 'var(--yellow)' : 'var(--green)' }}>{available.toLocaleString()} {cur}</div>
                 <div className="card-sub">Expenses are deducted from your Current Balance.</div>
             </div>
 
