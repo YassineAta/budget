@@ -22,7 +22,7 @@ export default function Dashboard({ onTabChange }) {
     // The "Needs" is just a Target for the CURRENT month.
     const available = bufferGoal ? bufferGoal.saved : 0;
     const spentThisMonth = monthly.spent || 0;
-    const remainingBudget = Math.max(0, monthly.budget - spentThisMonth);
+    const remainingBudget = Math.min(available, Math.max(0, monthly.budget - spentThisMonth));
 
     const topGoals = goals
         .filter(g => !g.isBuffer && g.saved < g.target)
