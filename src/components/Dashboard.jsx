@@ -30,7 +30,7 @@ export default function Dashboard({ onTabChange }) {
         .slice(0, 3);
     const readyGoals = goals.filter(g => !g.isBuffer && !g.isRecurring && g.saved >= g.target);
 
-    const maxDisplay = Math.min(bufferMaxMonths || 12, 12);
+    const maxDisplay = bufferMaxMonths || 12;
 
     return (
         <div>
@@ -124,9 +124,9 @@ export default function Dashboard({ onTabChange }) {
 
                 <ProgressBar
                     value={bufferGoal?.saved || 0}
-                    max={bufferGoal?.target || 1}
+                    max={maxDisplay * essentials || 1}
                     label="Long-term Safety Progress"
-                    color={available >= (bufferGoal?.target || 0) ? 'green' : available / (bufferGoal?.target || 1) > 0.5 ? 'yellow' : 'red'}
+                    color={available >= (maxDisplay * essentials) ? 'green' : available / (maxDisplay * essentials) > 0.5 ? 'yellow' : 'blue'}
                 />
             </div>
 
