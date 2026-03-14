@@ -17,6 +17,7 @@ export default function GoalCard({ goal, compact = false }) {
     const [editPriority, setEditPriority] = useState(goal.priority);
     const [editCategory, setEditCategory] = useState(goal.category);
     const [editDate, setEditDate] = useState(goal.targetDate || '');
+    const [editIsRecurring, setEditIsRecurring] = useState(goal.isRecurring || false);
 
     const remaining = Math.max(0, goal.target - goal.saved);
     const pct = goal.target > 0 ? Math.round((goal.saved / goal.target) * 100) : 0;
@@ -56,6 +57,7 @@ export default function GoalCard({ goal, compact = false }) {
                 priority: editPriority,
                 category: editCategory,
                 targetDate: editDate,
+                isRecurring: editIsRecurring,
             }
         });
         setMode(null);
@@ -180,6 +182,17 @@ export default function GoalCard({ goal, compact = false }) {
                         </select>
                         <input type="month" value={editDate} onChange={e => setEditDate(e.target.value)} />
                     </div>
+                    {!goal.isBuffer && (
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>
+                            <input
+                                type="checkbox"
+                                id={`recurring-${goal.id}`}
+                                checked={editIsRecurring}
+                                onChange={e => setEditIsRecurring(e.target.checked)}
+                            />
+                            <label htmlFor={`recurring-${goal.id}`} style={{ cursor: 'pointer' }}>Mandatory Monthly Recurring Expense</label>
+                        </div>
+                    )}
                     <div className="flex-between mt-12">
                         <button className="btn btn-ghost" type="button" onClick={() => setMode(null)}>Cancel</button>
                         <button className="btn btn-primary" type="submit">Save Changes</button>
