@@ -51,9 +51,8 @@ export function rootReducer(state, action) {
     case 'FUND_GOAL': {
       const goal = base.goals.find(g => g.id === action.id);
       if (!goal) return base;
-      const amt = goal.isBuffer
-        ? Math.min(action.amount, base.cash)
-        : Math.min(action.amount, base.cash, goal.target - goal.saved);
+      const remaining = Math.max(0, goal.target - goal.saved);
+      const amt = Math.min(action.amount, base.cash, remaining);
       next = {
         ...base,
         cash: base.cash - amt,

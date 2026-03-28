@@ -214,7 +214,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         placeholder="Amount"
                         value={fundAmt}
                         onChange={e => setFundAmt(e.target.value)}
-                        max={goal.isBuffer ? cash : Math.min(remaining, cash)}
+                        max={Math.min(remaining, cash)}
                         autoFocus
                     />
                     <button className="btn btn-sm btn-primary" type="submit">Add</button>
