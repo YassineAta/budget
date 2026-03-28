@@ -2,24 +2,26 @@ import { createContext, useContext, useReducer, useEffect, useMemo } from 'react
 import { validateState } from './schema';
 import { rootReducer } from './reducers/index';
 import { calculateBufferTarget } from './utils/storeUtils';
+import { applyDueExpenses } from './utils/cashflow';
 
 export * from './utils/storeUtils';
 
 const STORAGE_KEY = 'finplan_v6';
 
 // ─── Default state ────────────────────────────────────────────────────────────
+const _now = new Date().toISOString();
 const defaultState = {
-  cash: 0,                 
+  cash: 0,
   monthly: { budget: 200, spent: 0, expenses: [], resetDate: new Date().toISOString().slice(0, 7) },
-  safetyMonths: 3,         
-  bufferMaxMonths: 12,     
-  bufferLeveledUp: false,  
+  safetyMonths: 3,
   goals: [
-    { id: 'buffer', name: 'Safety Buffer', target: 0, saved: 0, priority: 'High', category: 'Essential', isBuffer: true, isRecurring: false },
-    { id: 'gym', name: 'Gym Membership', target: 70, saved: 0, priority: 'High', category: 'Essential', isBuffer: false, isRecurring: true, monthlyCost: 70 },
-    { id: 'g1', name: 'Pixel 9a', target: 1500, saved: 0, priority: 'High', category: 'Productivity', isRecurring: false },
-    { id: 'g2', name: 'Desk Chair', target: 600, saved: 0, priority: 'Medium', category: 'Comfort', isRecurring: false },
-    { id: 'g3', name: 'Jeans', target: 160, saved: 0, priority: 'Medium', category: 'Comfort', isRecurring: false },
+    { id: 'buffer', name: 'Safety Buffer', target: 0, saved: 0, priority: 'High', category: 'Essential', isBuffer: true, type: 'saving' },
+    { id: 'g1', name: 'Pixel 9a', target: 1500, saved: 0, priority: 'High', category: 'Productivity', type: 'saving' },
+    { id: 'g2', name: 'Desk Chair', target: 600, saved: 0, priority: 'Medium', category: 'Comfort', type: 'saving' },
+    { id: 'g3', name: 'Jeans', target: 160, saved: 0, priority: 'Medium', category: 'Comfort', type: 'saving' },
+  ],
+  recurringExpenses: [
+    { id: 'gym', name: 'Gym Membership', amount: 70, period: 'monthly', cut_day: 1, start_date: _now, last_applied_date: _now, active: true },
   ],
   incomeEvents: [],
   settings: { currency: 'TND' },
@@ -34,7 +36,7 @@ function decodeData(str) {
   try {
     return JSON.parse(decodeURIComponent(atob(str)));
   } catch (e) {
-    return JSON.parse(str); // Fallback for old unencoded data
+    return JSON.parse(str);
   }
 }
 
@@ -43,8 +45,9 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = decodeData(raw);
-      const s = validateState(parsed);
-      
+      let s = validateState(parsed);
+
+      // ── Legacy: flat balance field ─────────────────────────────────────────
       if (s.balance !== undefined) {
         const buf = s.goals.find(g => g.isBuffer);
         if (buf) buf.saved += s.balance;
@@ -52,17 +55,53 @@ function loadState() {
         delete s.monthlyTransferred;
         delete s.transferResetMonth;
       }
+
+      // ── Migration 1: isRecurring goals → recurringExpenses ─────────────────
+      // Runs exactly once (sentinel: !s.recurringExpenses).
+      if (!s.recurringExpenses) {
+        try {
+          const backupKey = `finplan_v6_backup_${new Date().toISOString().slice(0, 10)}`;
+          if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, raw);
+        } catch { }
+
+        const now = new Date().toISOString();
+        const migrated = [];
+        s.goals = s.goals.filter(g => {
+          if (g.isRecurring && !g.isBuffer) {
+            migrated.push({
+              id: g.id, name: g.name,
+              amount: g.monthlyCost || g.target,
+              period: 'monthly',
+              cut_day: 1,
+              start_date: now,
+              last_applied_date: now, // no retroactive drain
+              active: g.activeThisMonth !== false,
+            });
+            return false;
+          }
+          return true;
+        });
+        s.recurringExpenses = migrated;
+      }
+
+      // ── Migration 2: add cut_day to existing recurringExpenses ─────────────
+      s.recurringExpenses = s.recurringExpenses.map(e =>
+        e.cut_day !== undefined ? e : { ...e, cut_day: 1 }
+      );
+
+      // ── Remove legacy bufferLeveledUp flag if present ──────────────────────
+      delete s.bufferLeveledUp;
+
+      // ── Recalculate buffer target ──────────────────────────────────────────
       s.goals = s.goals.map(g => g.isBuffer ? { ...g, target: calculateBufferTarget(s) } : g);
 
-      const bufAfter = s.goals.find(g => g.isBuffer);
-      const maxMonths = s.bufferMaxMonths || 12;
-      if (bufAfter && bufAfter.target > 0 && bufAfter.saved >= bufAfter.target && (s.safetyMonths || 3) < maxMonths && !s.bufferLeveledUp) {
-        s.bufferLeveledUp = true;
-      }
+      // ── Apply any due recurring cuts since last session ────────────────────
+      s = applyDueExpenses(s);
+
       return s;
     }
   } catch { }
-  
+
   const fresh = JSON.parse(JSON.stringify(defaultState));
   fresh.goals = fresh.goals.map(g => g.isBuffer ? { ...g, target: calculateBufferTarget(fresh) } : g);
   return fresh;
@@ -80,7 +119,6 @@ export function StoreProvider({ children }) {
 
   const value = useMemo(() => ({ state, dispatch }), [state, dispatch]);
 
-  console.log('📦 Render: StoreProvider');
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 

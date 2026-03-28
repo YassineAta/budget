@@ -1,19 +1,33 @@
+import { normalizeToMonthly } from './cashflow';
+
 let _idCounter = Date.now();
 export function uid() { return (++_idCounter).toString(36); }
 
+/**
+ * Calculate the safety buffer's target amount.
+ * Target = (monthly survival budget + all active recurring costs, normalised to
+ * monthly) × safetyMonths.
+ *
+ * Reads from state.recurringExpenses (new model). Falls back gracefully to 0
+ * when the array is absent (fresh state before migration).
+ */
 export function calculateBufferTarget(state) {
   const needs = state.monthly?.budget || 200;
-  const recurring = (state.goals || [])
-    .filter(g => g.isRecurring && g.activeThisMonth !== false)
-    .reduce((s, g) => s + (g.monthlyCost || 0), 0);
+  const recurring = (state.recurringExpenses || [])
+    .filter(e => e.active)
+    .reduce((s, e) => s + normalizeToMonthly(e), 0);
   return (needs + recurring) * (state.safetyMonths || 3);
 }
 
+/**
+ * Total monthly essential spending: survival budget + active recurring costs.
+ * Used for buffer level calculations and income allocation.
+ */
 export function monthlyEssentials(state) {
   const needs = state.monthly?.budget || 200;
-  const recurring = (state.goals || [])
-    .filter(g => g.isRecurring && g.activeThisMonth !== false)
-    .reduce((s, g) => s + (g.monthlyCost || 0), 0);
+  const recurring = (state.recurringExpenses || [])
+    .filter(e => e.active)
+    .reduce((s, e) => s + normalizeToMonthly(e), 0);
   return needs + recurring;
 }
 
@@ -37,6 +51,7 @@ export function getMonthlySaving(goal) {
   const installments = monthsDiff + 1;
   return { needed: Math.ceil((goal.target - goal.saved) / installments), months: installments, status: 'active' };
 }
+
 export function formatTargetDate(dateStr) {
   if (!dateStr) return '';
   const [year, month] = dateStr.split('-');

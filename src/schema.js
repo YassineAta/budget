@@ -11,6 +11,20 @@ export const goalSchema = z.object({
   isRecurring: z.boolean().optional(),
   monthlyCost: z.number().min(0).optional(),
   targetDate: z.string().optional(),
+  /** 'saving' = normal savings goal; 'wishlist' = does not affect balance */
+  type: z.enum(['saving', 'wishlist']).optional(),
+}).passthrough();
+
+export const recurringExpenseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  amount: z.number().min(0),
+  period: z.enum(['monthly', 'weekly']),
+  /** Day of month (1-31) on which this expense is cut. Only used for monthly period. */
+  cut_day: z.number().int().min(1).max(31).optional(),
+  start_date: z.string(),
+  last_applied_date: z.string(),
+  active: z.boolean(),
 }).passthrough();
 
 export const expenseSchema = z.object({
@@ -39,6 +53,7 @@ export const stateSchema = z.object({
   bufferMaxMonths: z.number().min(0).optional(),
   bufferLeveledUp: z.boolean().optional(),
   goals: z.array(goalSchema),
+  recurringExpenses: z.array(recurringExpenseSchema).optional(),
   incomeEvents: z.array(incomeEventSchema).optional(),
   settings: z.object({
     currency: z.string()

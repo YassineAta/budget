@@ -1,11 +1,13 @@
 import DOMPurify from 'dompurify';
-import { uid, calculateBufferTarget, monthlyEssentials, getMonthlySaving } from '../utils/storeUtils';
+import { uid, calculateBufferTarget } from '../utils/storeUtils';
+import { applyDueExpenses } from '../utils/cashflow';
+import { computeAllocation } from '../utils/allocator';
 
 export function rootReducer(state, action) {
   let next;
   const thisMonth = new Date().toISOString().slice(0, 7);
 
-  const base = state; // top level placeholder 
+  const base = state;
 
   switch (action.type) {
     case 'SET_CASH':
@@ -14,30 +16,26 @@ export function rootReducer(state, action) {
 
     case 'ADD_GOAL': {
       const name = action.goal.name ? DOMPurify.sanitize(action.goal.name) : 'Unnamed';
-      next = { ...base, goals: [...base.goals, { id: uid(), saved: 0, isBuffer: false, isRecurring: false, monthlyCost: 0, activeThisMonth: true, ...action.goal, name }] };
-      break;
-    }
-
-    case 'TOGGLE_RECURRING_ACTIVE':
       next = {
         ...base,
-        goals: base.goals.map(g => g.id === action.id ? { ...g, activeThisMonth: !g.activeThisMonth } : g)
+        goals: [...base.goals, {
+          id: uid(), saved: 0, isBuffer: false,
+          type: 'saving',
+          ...action.goal,
+          name,
+          // Legacy fields: harmless but no longer used by engine
+          isRecurring: false, monthlyCost: 0, activeThisMonth: true,
+        }]
       };
       break;
+    }
 
     case 'EDIT_GOAL': {
       const updates = { ...action.updates };
       if (updates.name) updates.name = DOMPurify.sanitize(updates.name);
-      
       next = {
         ...base,
-        goals: base.goals.map(g => g.id === action.id ? {
-          ...g,
-          ...updates,
-          monthlyCost: (updates.isRecurring || g.isRecurring)
-            ? (updates.monthlyCost ?? g.monthlyCost ?? updates.target ?? g.target)
-            : 0
-        } : g)
+        goals: base.goals.map(g => g.id === action.id ? { ...g, ...updates } : g)
       };
       break;
     }
@@ -112,14 +110,14 @@ export function rootReducer(state, action) {
     case 'DELETE_INCOME': {
       const inc = base.incomeEvents?.find(e => e.id === action.id);
       if (!inc) return base;
-      
+
       let nextCash = base.cash;
       let nextGoals = base.goals.map(g => ({ ...g }));
 
       if (inc.allocations) {
         for (const [goalId, amt] of Object.entries(inc.allocations)) {
-            const goal = nextGoals.find(g => g.id === goalId);
-            if (goal) goal.saved = Math.max(0, goal.saved - amt);
+          const goal = nextGoals.find(g => g.id === goalId);
+          if (goal) goal.saved = Math.max(0, goal.saved - amt);
         }
         nextCash = Math.max(0, nextCash - (inc.cashAllocated || 0));
       } else {
@@ -136,81 +134,30 @@ export function rootReducer(state, action) {
     }
 
     case 'ALLOCATE_INCOME': {
-      let pool = action.amount;
-      const goals = base.goals.map(g => ({ ...g }));
-      const essentials = monthlyEssentials(base);
-      
-      const prevSaved = {};
-      goals.forEach(g => prevSaved[g.id] = g.saved);
+      const { allocations, cashRemainder } = computeAllocation(base, action.amount);
 
-      const buf = goals.find(g => g.isBuffer);
-      if (buf) {
-        const neededForSurvival = Math.max(0, essentials - buf.saved);
-        const toSurvival = Math.min(neededForSurvival, pool);
-        buf.saved += toSurvival;
-        pool -= toSurvival;
-      }
-
-      goals.filter(g => !g.isBuffer && g.saved < g.target).forEach(g => {
-        const plan = getMonthlySaving(g);
-        if (plan && plan.needed > 0) {
-          const installment = Math.min(plan.needed, pool, g.target - g.saved);
-          g.saved += installment;
-          pool -= installment;
-        }
-      });
-
-      const order = { High: 0, Medium: 1, Low: 2 };
-      goals.filter(g => !g.isBuffer && g.saved < g.target)
-        .sort((a, b) => order[a.priority] - order[b.priority])
-        .forEach(g => {
-          const fill = Math.min(g.target - g.saved, pool);
-          g.saved += fill;
-          pool -= fill;
-        });
-
-      if (buf && pool > 0) {
-        const toBuffer = Math.min(buf.target - buf.saved, pool);
-        buf.saved += toBuffer;
-        pool -= toBuffer;
-      }
-
-      const allocations = {};
-      goals.forEach(g => {
-        const diff = g.saved - prevSaved[g.id];
-        if (diff > 0) allocations[g.id] = diff;
-      });
+      const goals = base.goals.map(g =>
+        allocations[g.id] ? { ...g, saved: g.saved + allocations[g.id] } : g
+      );
 
       const source = action.source ? DOMPurify.sanitize(action.source) : 'Unknown Source';
-      const inc = { 
-        id: uid(), 
-        source, 
-        amount: action.amount, 
+      const inc = {
+        id: uid(), source, amount: action.amount,
         date: new Date().toISOString(),
-        allocations,
-        cashAllocated: pool
+        allocations, cashAllocated: cashRemainder,
       };
       next = {
         ...base,
-        cash: base.cash + pool,
+        cash: base.cash + cashRemainder,
         goals,
         incomeEvents: [inc, ...(base.incomeEvents || [])],
       };
       break;
     }
 
-    case 'DISMISS_BUFFER_LEVELUP': {
-      const newMonths = Math.min((base.safetyMonths || 3) + 1, base.bufferMaxMonths || 12);
-      next = { ...base, bufferLeveledUp: false, safetyMonths: newMonths };
-      break;
-    }
-
     case 'SET_BUFFER_MAX':
-      next = {
-        ...base,
-        bufferMaxMonths: action.value,
-        safetyMonths: Math.min(base.safetyMonths || 3, action.value)
-      };
+      // Kept for backwards-compat with any stored dispatches
+      next = { ...base, bufferMaxMonths: action.value };
       break;
 
     case 'SET_MONTHLY_BUDGET':
@@ -218,7 +165,7 @@ export function rootReducer(state, action) {
       break;
 
     case 'SET_SAFETY_MONTHS':
-      next = { ...base, safetyMonths: action.value, bufferLeveledUp: false };
+      next = { ...base, safetyMonths: Math.max(1, action.value) };
       break;
 
     case 'ADD_EXPENSE': {
@@ -248,9 +195,59 @@ export function rootReducer(state, action) {
     case 'RESET_MONTHLY':
       next = {
         ...base,
-        goals: base.goals.map(g => g.isRecurring ? { ...g, saved: 0, activeThisMonth: true } : g),
         monthly: { ...base.monthly, spent: 0, expenses: [], resetDate: thisMonth },
       };
+      break;
+
+    // ── Recurring expense management ────────────────────────────────────────
+
+    case 'ADD_RECURRING_EXPENSE': {
+      const name = action.expense.name ? DOMPurify.sanitize(action.expense.name) : 'Unnamed';
+      const now = new Date().toISOString();
+      const exp = {
+        id: uid(),
+        name,
+        amount: action.expense.amount,
+        period: action.expense.period || 'monthly',
+        cut_day: action.expense.cut_day || 1,
+        start_date: now,
+        last_applied_date: now,
+        active: true,
+      };
+      next = { ...base, recurringExpenses: [...(base.recurringExpenses || []), exp] };
+      break;
+    }
+
+    case 'EDIT_RECURRING_EXPENSE': {
+      next = {
+        ...base,
+        recurringExpenses: (base.recurringExpenses || []).map(e =>
+          e.id === action.id ? { ...e, ...action.updates } : e
+        )
+      };
+      break;
+    }
+
+    case 'DELETE_RECURRING_EXPENSE':
+      next = {
+        ...base,
+        recurringExpenses: (base.recurringExpenses || []).filter(e => e.id !== action.id)
+      };
+      break;
+
+    case 'TOGGLE_RECURRING':
+      next = {
+        ...base,
+        recurringExpenses: (base.recurringExpenses || []).map(e =>
+          e.id === action.id ? { ...e, active: !e.active } : e
+        )
+      };
+      break;
+
+    // ── Cashflow tick (on app focus / visibility change) ────────────────────
+
+    case 'APPLY_CASHFLOW':
+      next = applyDueExpenses(base);
       break;
 
     default:
@@ -258,33 +255,11 @@ export function rootReducer(state, action) {
   }
 
   if (next) {
+    // Always keep buffer target in sync with safetyMonths and recurringExpenses
     const bufTarget = calculateBufferTarget(next);
     next.goals = next.goals.map(g => g.isBuffer ? { ...g, target: bufTarget } : g);
-
-    const bufAfter = next.goals.find(g => g.isBuffer);
-    const maxMonths = next.bufferMaxMonths || 12;
-    const essentials = monthlyEssentials(next);
-    
-    // Level Up logic
-    if (bufAfter && bufAfter.target > 0 && bufAfter.saved >= bufAfter.target && (next.safetyMonths || 3) < maxMonths && !next.bufferLeveledUp) {
-      next.bufferLeveledUp = true;
-    }
-
-    // Dynamic Buffer FIX: Level Down logic
-    // If savings drop below the current milestone minus some buffer (e.g. 90% of the previous month's target),
-    // we should consider dropping the current safetyMonths so the UI goal is realistic.
-    // Actually, just checking if it's below the PREVIOUS milestone target is enough.
-    const currentMonths = next.safetyMonths || 3;
-    if (bufAfter && currentMonths > 1) {
-       const prevMilestoneTarget = (currentMonths - 1) * essentials;
-       // If we have less than the previous milestone, we MUST drop down.
-       if (bufAfter.saved < prevMilestoneTarget) {
-         next.safetyMonths = Math.max(1, Math.floor(bufAfter.saved / essentials) + 1);
-         next.bufferLeveledUp = false;
-         // Recalculate target for the new safetyMonths
-         bufAfter.target = next.safetyMonths * essentials;
-       }
-    }
+    // Purge legacy flag so it never reappears
+    delete next.bufferLeveledUp;
   }
   return next || base;
 }

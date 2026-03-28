@@ -49,9 +49,9 @@ export default function MonthlySpending() {
             <div className="card">
                 <div className="card-title">This Month's Spending</div>
                 <div className="mini-grid mb-8">
-                    <div className="mini-card"><div className="label">Spent</div><div className="value" style={{ color: pct > 100 ? 'var(--red)' : 'inherit' }}>{monthly.spent}</div></div>
-                    <div className="mini-card"><div className="label">Budget</div><div className="value">{monthly.budget}</div></div>
-                    <div className="mini-card"><div className="label">Left</div><div className="value text-green">{Math.max(0, monthly.budget - monthly.spent)}</div></div>
+                    <div className="mini-card"><div className="label">Spent</div><div className="value" style={{ color: pct > 100 ? 'var(--red)' : 'inherit' }}>{monthly.spent.toLocaleString()} {cur}</div></div>
+                    <div className="mini-card"><div className="label">Budget</div><div className="value">{monthly.budget.toLocaleString()} {cur}</div></div>
+                    <div className="mini-card"><div className="label">Left</div><div className="value text-green">{Math.max(0, monthly.budget - monthly.spent).toLocaleString()} {cur}</div></div>
                 </div>
                 <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
                     <div style={{
@@ -101,7 +101,7 @@ export default function MonthlySpending() {
                                 <div className="list-item-meta">{new Date(exp.date).toLocaleDateString()}</div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <span style={{ fontWeight: 700 }}>{exp.amount} {cur}</span>
+                                <span style={{ fontWeight: 700 }}>{exp.amount.toLocaleString()} {cur}</span>
                                 <button className="btn btn-sm btn-ghost" aria-label="Delete Expense" onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })} style={{ color: 'var(--red)', padding: '2px 6px' }}>✕</button>
                             </div>
                         </div>

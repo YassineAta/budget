@@ -18,7 +18,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
     const [editPriority, setEditPriority] = useState(goal.priority);
     const [editCategory, setEditCategory] = useState(goal.category);
     const [editDate, setEditDate] = useState(goal.targetDate || '');
-    const [editIsRecurring, setEditIsRecurring] = useState(goal.isRecurring || false);
+    const [editType, setEditType] = useState(goal.type || 'saving');
 
     const { remaining, pct, isFunded, plan, barColor, pctColor } = useMemo(() => {
         const progress = calculateProgress(goal.saved, goal.target);
@@ -28,7 +28,12 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
         };
     }, [goal]);
 
-    console.log(`🫀 Render: GoalCard - ${goal.name}`);
+    // Icon based on goal kind
+    const icon = goal.isBuffer ? '🛡️' : goal.type === 'wishlist' ? '💭' : '🎯';
+
+    // Wishlist goals are not purchasable until converted to saving
+    const isPurchasable = isFunded && !goal.isBuffer && goal.type !== 'wishlist';
+
 
     function handleFund(e) {
         e.preventDefault();
@@ -59,7 +64,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                 priority: editPriority,
                 category: editCategory,
                 targetDate: editDate,
-                isRecurring: editIsRecurring,
+                type: editType,
             }
         });
         setMode(null);
@@ -77,19 +82,19 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                 <div className="flex-between">
                     <div>
                         <div className="list-item-name" style={{ fontSize: '0.9rem' }}>
-                            {goal.isBuffer ? '🛡️' : goal.isRecurring ? '🔄' : '🎯'} {goal.name}
+                            {icon} {goal.name}
                         </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         {isFunded ? (
-                            <div className="badge success">READY</div>
+                            <div className="badge success">{goal.isBuffer ? 'FUNDED' : 'READY'}</div>
                         ) : (
                             <div style={{ fontSize: '1rem', fontWeight: 800, color: pctColor }}>{pct}%</div>
                         )}
                     </div>
                 </div>
                 <ProgressBar value={goal.saved} max={goal.target} color={barColor} />
-                {isFunded && !goal.isBuffer && !goal.isRecurring && (
+                {isPurchasable && (
                     <button className="btn btn-sm btn-primary mt-8" onClick={handlePurchase} style={{ width: '100%' }}>Buy Now 🛒</button>
                 )}
             </div>
@@ -103,31 +108,23 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                     <div className="flex-between">
                         <div>
                             <div style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                {goal.isBuffer ? '🛡️' : goal.isRecurring ? '🔄' : '🎯'}
+                                {icon}
                                 {goal.name}
                             </div>
                             <div className="list-item-meta" style={{ marginTop: 4 }}>
-                                <span className={`badge ${goal.priority.toLowerCase()}`}>{goal.priority}</span>
-                                <span className={`badge ${goal.category.toLowerCase()}`}>{goal.category}</span>
+                                {goal.priority && <span className={`badge ${goal.priority.toLowerCase()}`}>{goal.priority}</span>}
+                                {goal.category && <span className={`badge ${goal.category.toLowerCase()}`}>{goal.category}</span>}
                                 {goal.targetDate && <span className="badge date">📅 {formatTargetDate(goal.targetDate)}</span>}
-                                {goal.isRecurring && (
-                                    <span className="badge essential" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: goal.activeThisMonth === false ? 0.5 : 1 }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={goal.activeThisMonth !== false}
-                                            onChange={() => dispatch({ type: 'TOGGLE_RECURRING_ACTIVE', id: goal.id })}
-                                            aria-label="Active this month"
-                                            style={{ margin: 0, width: 12, height: 12 }}
-                                        />
-                                        Monthly: {goal.monthlyCost} {cur}
-                                        {goal.activeThisMonth === false && <span style={{ fontSize: '0.6rem', color: 'var(--red)', fontWeight: 800 }}>SKIPPED</span>}
-                                    </span>
+                                {goal.type === 'wishlist' && (
+                                    <span className="badge" style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa' }}>Wishlist</span>
                                 )}
                             </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                             {isFunded ? (
-                                <div className="badge success" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Ready to Buy</div>
+                                <div className="badge success" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                    {goal.isBuffer ? 'Fully Funded' : 'Ready to Buy'}
+                                </div>
                             ) : (
                                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: pctColor }}>{pct}%</div>
                             )}
@@ -141,7 +138,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         color={barColor}
                     />
 
-                    {isFunded && !goal.isBuffer && !goal.isRecurring && (
+                    {isPurchasable && (
                         <div className="alert alert-success mt-12">
                             <span>🎉</span>
                             <div style={{ flex: 1 }}>
@@ -167,7 +164,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         {!isFunded && <button className="btn btn-sm btn-primary" onClick={() => setMode('fund')}>+ Fund</button>}
                         {goal.saved > 0 && <button className="btn btn-sm btn-ghost" onClick={() => setMode('withdraw')}>− Withdraw</button>}
                         <button className="btn btn-sm btn-ghost" onClick={() => setMode('edit')} style={{ marginLeft: goal.saved > 0 ? 0 : 'auto' }}>✏️ Edit</button>
-                        {!goal.isBuffer && !goal.isRecurring && (
+                        {!goal.isBuffer && (
                             <button className="btn btn-sm btn-danger" aria-label="Delete goal" onClick={() => dispatch({ type: 'DELETE_GOAL', id: goal.id })} style={{ marginLeft: 'auto' }}>✕</button>
                         )}
                     </div>
@@ -194,15 +191,13 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         </select>
                         <input type="month" aria-label="Target Date" value={editDate} onChange={e => setEditDate(e.target.value)} />
                     </div>
+                    {/* Type selector: saving = affects balance/buffer; wishlist = display-only */}
                     {!goal.isBuffer && (
-                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>
-                            <input
-                                type="checkbox"
-                                id={`recurring-${goal.id}`}
-                                checked={editIsRecurring}
-                                onChange={e => setEditIsRecurring(e.target.checked)}
-                            />
-                            <label htmlFor={`recurring-${goal.id}`} style={{ cursor: 'pointer' }}>Mandatory Monthly Recurring Expense</label>
+                        <div className="input-row mt-8">
+                            <select aria-label="Goal Type" value={editType} onChange={e => setEditType(e.target.value)} style={{ flex: 1 }}>
+                                <option value="saving">💰 Saving Goal</option>
+                                <option value="wishlist">💭 Wishlist (no balance effect)</option>
+                            </select>
                         </div>
                     )}
                     <div className="flex-between mt-12">

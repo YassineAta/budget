@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StoreProvider } from './store';
+import { useState, useEffect } from 'react';
+import { StoreProvider, useStore } from './store';
 import Dashboard from './components/Dashboard';
 import MonthlySpending from './components/MonthlySpending';
 import GoalsList from './components/GoalsList';
@@ -14,6 +14,24 @@ const TABS = [
 
 function AppContent() {
     const [tab, setTab] = useState('dashboard');
+    const { dispatch } = useStore();
+
+    // Re-apply cashflow whenever the user returns to the app so the balance
+    // stays current even after leaving the tab/window for a while.
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                dispatch({ type: 'APPLY_CASHFLOW' });
+            }
+        };
+        const onFocus = () => dispatch({ type: 'APPLY_CASHFLOW' });
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onFocus);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', onFocus);
+        };
+    }, [dispatch]);
 
     return (
         <div className="app">

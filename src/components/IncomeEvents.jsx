@@ -1,67 +1,37 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { computeAllocation } from '../utils/allocator';
+import { getFutureEvents } from '../utils/cashflow';
+
+const TYPE_STYLES = {
+  survival:      { color: 'var(--yellow)', label: 'Survival needs' },
+  urgent:        { color: 'var(--red)',    label: 'Urgent / overdue' },
+  deadline:      { color: 'var(--blue)',   label: 'Deadline installment' },
+  'high-priority': { color: 'var(--green)', label: 'High priority' },
+  'buffer-topup':  { color: 'var(--yellow)', label: 'Buffer top-up' },
+  'medium-priority': { color: 'var(--green)', label: 'Medium priority' },
+  wishlist:      { color: '#a78bfa',       label: 'Wishlist' },
+  'low-priority':  { color: 'rgba(255,255,255,0.5)', label: 'Low priority' },
+};
 
 export default function IncomeEvents() {
     const { state, dispatch } = useStore();
-    const { incomeEvents, goals, cash, settings } = state;
+    const { incomeEvents, cash, settings } = state;
     const cur = settings.currency;
 
     const [source, setSource] = useState('');
     const [amount, setAmount] = useState('');
     const [draft, setDraft] = useState(null);
 
-    function previewAllocation(incAmount) {
-        let pool = incAmount;
-        const suggestion = { survival: 0, installments: [], priorities: [], cash: 0, total: incAmount };
-
-        const buffer = goals.find(g => g.isBuffer);
-        const essentials = state.monthly.budget + goals.filter(g => g.isRecurring).reduce((s, g) => s + (g.monthlyCost || 0), 0);
-
-        // 1. Survival
-        if (buffer) {
-            const neededForSurvival = Math.max(0, essentials - buffer.saved);
-            const toSurvival = Math.min(neededForSurvival, pool);
-            suggestion.survival = toSurvival; pool -= toSurvival;
-        }
-
-        // 2. Installments
-        goals.filter(g => !g.isBuffer && g.saved < g.target).forEach(g => {
-            const plan = state.goals.find(goal => goal.id === g.id); // Refresh via state
-            const targetDate = g.targetDate;
-            if (targetDate) {
-                // Manual calc for preview parity
-                const now = new Date();
-                const curMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                const [tYear, tMonth] = targetDate.split('-');
-                const targetDateObj = new Date(parseInt(tYear, 10), parseInt(tMonth, 10) - 1, 1);
-                const diff = (targetDateObj.getFullYear() - curMonth.getFullYear()) * 12 + (targetDateObj.getMonth() - curMonth.getMonth());
-                if (diff >= 0) {
-                    const inst = Math.ceil((g.target - g.saved) / (diff + 1));
-                    const take = Math.min(inst, pool);
-                    if (take > 0) { suggestion.installments.push({ name: g.name, amount: take }); pool -= take; }
-                }
-            }
-        });
-
-        // 3. Priorities
-        const pOrder = { High: 0, Medium: 1, Low: 2 };
-        goals.filter(g => !g.isBuffer && g.saved < g.target)
-            .sort((a, b) => pOrder[a.priority] - pOrder[b.priority])
-            .forEach(g => {
-                const take = Math.min(Math.max(0, g.target - g.saved), pool);
-                if (take > 0) { suggestion.priorities.push({ name: g.name, amount: take }); pool -= take; }
-            });
-
-        // 4. Back to Buffer or Cash
-        suggestion.cash = pool;
-        return suggestion;
-    }
+    // Next 3 upcoming bill cuts
+    const upcomingBills = getFutureEvents(state, 45).slice(0, 4);
 
     function handleSubmit(e) {
         e.preventDefault();
         const val = parseFloat(amount);
-        if (!source.trim() || !val || val <= 0) return;
-        setDraft({ source: source.trim(), amount: val, split: previewAllocation(val) });
+        if (!source.trim() || !val || val > 0 === false) return;
+        const split = computeAllocation(state, val);
+        setDraft({ source: source.trim(), amount: val, split });
     }
 
     function confirmAllocation() {
@@ -82,11 +52,37 @@ export default function IncomeEvents() {
         <div>
             <div className="section-title">💵 Income Management</div>
 
-    // Balance context
             {cash > 0 && (
                 <div className="card" style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
                     <div style={{ display: 'flex', gap: 24 }}>
-                        <div><div className="label" style={{ fontSize: '0.65rem' }}>UNALLOCATED CASH</div><div className="value text-blue" style={{ fontSize: '1.1rem', fontWeight: 800 }}>{cash} {cur}</div></div>
+                        <div>
+                            <div className="label" style={{ fontSize: '0.65rem' }}>UNALLOCATED CASH</div>
+                            <div className="value text-blue" style={{ fontSize: '1.1rem', fontWeight: 800 }}>{cash.toLocaleString()} {cur}</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Upcoming bills */}
+            {upcomingBills.length > 0 && (
+                <div className="card mt-12" style={{ background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.15)' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Upcoming bills (next 45d)
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {upcomingBills.map((ev, i) => {
+                            const daysAway = Math.ceil((ev.date - new Date()) / 86_400_000);
+                            const color = daysAway <= 7 ? 'var(--red)' : daysAway <= 14 ? 'var(--yellow)' : 'rgba(255,255,255,0.6)';
+                            return (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                                    <span style={{ color }}>{ev.name}</span>
+                                    <span style={{ color, fontWeight: 600 }}>
+                                        {ev.amount.toLocaleString()} {cur}
+                                        <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 6 }}>in {daysAway}d</span>
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -112,37 +108,38 @@ export default function IncomeEvents() {
                 </div>
             )}
 
-            {/* Allocation Wizard */}
+            {/* Allocation Preview */}
             {draft && (
                 <div className="card" style={{ border: '2px solid var(--blue)' }}>
                     <div className="card-title"><span className="icon">🧠</span> Intelligent Allocation</div>
                     <div className="card-sub mb-12">
-                        Received <strong>{draft.amount.toLocaleString()} {cur}</strong> from <em>{draft.source}</em>. Suggested disciplined split:
+                        Received <strong>{draft.amount.toLocaleString()} {cur}</strong> from <em>{draft.source}</em>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {draft.split.survival > 0 && (
-                            <div className="list-item">
-                                <div>🛡️ Survival Needs</div>
-                                <div className="text-yellow" style={{ fontWeight: 700 }}>+{draft.split.survival.toLocaleString()}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {draft.split.lines.map((line, i) => {
+                            const style = TYPE_STYLES[line.type] || {};
+                            return (
+                                <div className="list-item" key={i}>
+                                    <div style={{ color: style.color }}>
+                                        {line.icon} {line.label}
+                                    </div>
+                                    <div style={{ fontWeight: 700, color: style.color }}>
+                                        +{line.amount.toLocaleString()} {cur}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {draft.split.cashRemainder > 0 && (
+                            <div className="list-item" style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: 8, marginTop: 2 }}>
+                                <div>💰 Remains as Free Cash</div>
+                                <div style={{ fontWeight: 700 }}>+{draft.split.cashRemainder.toLocaleString()} {cur}</div>
                             </div>
                         )}
-                        {draft.split.installments.map((r, i) => (
-                            <div className="list-item" key={i}>
-                                <div>📆 {r.name} (Installment)</div>
-                                <div className="text-blue" style={{ fontWeight: 700 }}>+{r.amount.toLocaleString()}</div>
-                            </div>
-                        ))}
-                        {draft.split.priorities.map((g, i) => (
-                            <div className="list-item" key={i}>
-                                <div>{i === 0 ? '🔥' : '🎯'} {g.name}</div>
-                                <div className="text-green" style={{ fontWeight: 700 }}>+{g.amount.toLocaleString()}</div>
-                            </div>
-                        ))}
-                        {draft.split.cash > 0 && (
-                            <div className="list-item" style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: 8 }}>
-                                <div>💰 Remains as Free Cash</div>
-                                <div style={{ fontWeight: 700 }}>+{draft.split.cash.toLocaleString()}</div>
+                        {draft.split.lines.length === 0 && draft.split.cashRemainder > 0 && (
+                            <div className="list-item">
+                                <div>💰 All to Free Cash</div>
+                                <div style={{ fontWeight: 700 }}>+{draft.split.cashRemainder.toLocaleString()} {cur}</div>
                             </div>
                         )}
                     </div>
@@ -167,8 +164,8 @@ export default function IncomeEvents() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                 <span className="text-green" style={{ fontWeight: 700 }}>+{inc.amount.toLocaleString()} {cur}</span>
-                                <button 
-                                    className="btn btn-sm btn-danger" 
+                                <button
+                                    className="btn btn-sm btn-danger"
                                     onClick={() => dispatch({ type: 'DELETE_INCOME', id: inc.id })}
                                     aria-label={`Delete ${inc.source} income`}
                                     style={{ padding: '4px 8px', fontSize: '0.65rem' }}
