@@ -204,18 +204,58 @@ export function rootReducer(state, action) {
 
     case 'ADD_RECURRING_EXPENSE': {
       const name = action.expense.name ? DOMPurify.sanitize(action.expense.name) : 'Unnamed';
-      const now = new Date().toISOString();
+      const nowDate = new Date();
+      const now = nowDate.toISOString();
+      const period = action.expense.period || 'monthly';
+      const cutDay = action.expense.cut_day || 1;
+
+      // Compute the last_applied_date as the most recent past cut date strictly
+      // before now. This lets the engine correctly detect whether the current
+      // period's cut is already due (e.g. expense added on the 11th with cut_day=10
+      // → April 10 is in the past and must fire immediately).
+      let lastApplied;
+      if (period === 'monthly') {
+        // Try the cut date in the current month
+        let year = nowDate.getFullYear();
+        let month = nowDate.getMonth();
+        const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+        let day = Math.min(cutDay, daysInMonth(year, month));
+        let candidate = new Date(year, month, day); // midnight local
+
+        if (candidate < nowDate) {
+          // This month's cut is in the past → use it as last_applied_date anchor
+          // so the engine will NOT fire it again (it hasn't been applied yet).
+          // We actually want the cut BEFORE this one, so the engine fires THIS one.
+          // Go back one month.
+          month -= 1;
+          if (month < 0) { month = 11; year -= 1; }
+          day = Math.min(cutDay, daysInMonth(year, month));
+          lastApplied = new Date(year, month, day).toISOString();
+        } else {
+          // Cut day is today or in the future this month → go back one month
+          month -= 1;
+          if (month < 0) { month = 11; year -= 1; }
+          day = Math.min(cutDay, daysInMonth(year, month));
+          lastApplied = new Date(year, month, day).toISOString();
+        }
+      } else {
+        // Weekly: set last_applied_date to 7 days ago so the next cut is in 7 days
+        lastApplied = new Date(nowDate.getTime() - 7 * 86_400_000).toISOString();
+      }
+
       const exp = {
         id: uid(),
         name,
         amount: action.expense.amount,
-        period: action.expense.period || 'monthly',
-        cut_day: action.expense.cut_day || 1,
+        period,
+        cut_day: cutDay,
         start_date: now,
-        last_applied_date: now,
+        last_applied_date: lastApplied,
         active: true,
       };
-      next = { ...base, recurringExpenses: [...(base.recurringExpenses || []), exp] };
+      // Immediately apply any cuts that are already due (e.g. cut_day was yesterday)
+      const stateWithExp = { ...base, recurringExpenses: [...(base.recurringExpenses || []), exp] };
+      next = applyDueExpenses(stateWithExp);
       break;
     }
 
