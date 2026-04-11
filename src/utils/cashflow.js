@@ -1,3 +1,5 @@
+import { uid } from './uid';
+
 /**
  * Cashflow Engine — discrete, scheduled recurring cuts
  *
@@ -102,15 +104,41 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
   const expenses = state.recurringExpenses || [];
   if (expenses.length === 0) return state;
 
+  // Current billing month string e.g. "2026-04" — cuts on/after this count
+  // toward this month's spent total. Earlier catch-up cuts are still logged
+  // (with their real date) but don't inflate the current-month counter.
+  const resetDate = state.monthly?.resetDate || new Date(asOf).toISOString().slice(0, 7);
+
   let totalDrain = 0;
+  let thisMonthDrain = 0;
   let hasChanges = false;
+  const newLedgerEntries = [];
+
   const updatedExpenses = expenses.map(exp => {
     const cuts = getPendingCuts(exp, asOf);
     if (cuts.length === 0) return exp;
     hasChanges = true;
-    totalDrain += r2(exp.amount * cuts.length);
-    // Advance last_applied_date to the date of the last cut (not "now"), so
-    // the next call correctly identifies the next cut date.
+
+    for (const cut of cuts) {
+      totalDrain = r2(totalDrain + exp.amount);
+      // Build a spending-log entry with the real cut date
+      const cutIso = cut.toISOString();
+      const cutMonth = cutIso.slice(0, 7);
+      newLedgerEntries.push({
+        id: uid(),
+        name: exp.name,
+        amount: exp.amount,
+        date: cutIso,
+        isRecurring: true,
+        recurringId: exp.id,
+      });
+      // Only count toward this month's budget if the cut is in the current period
+      if (cutMonth >= resetDate) {
+        thisMonthDrain = r2(thisMonthDrain + exp.amount);
+      }
+    }
+
+    // Advance last_applied_date to the date of the last cut (not "now")
     const lastCut = cuts[cuts.length - 1];
     return { ...exp, last_applied_date: lastCut.toISOString() };
   });
@@ -124,7 +152,22 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
       : g
   );
 
-  return { ...state, goals: updatedGoals, recurringExpenses: updatedExpenses };
+  // Append new entries to the monthly log and update spent counter
+  const updatedMonthly = {
+    ...state.monthly,
+    spent: r2((state.monthly?.spent || 0) + thisMonthDrain),
+    expenses: [
+      ...(state.monthly?.expenses || []),
+      ...newLedgerEntries,
+    ],
+  };
+
+  return {
+    ...state,
+    goals: updatedGoals,
+    recurringExpenses: updatedExpenses,
+    monthly: updatedMonthly,
+  };
 }
 
 /**

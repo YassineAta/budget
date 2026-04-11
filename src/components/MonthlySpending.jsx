@@ -95,14 +95,19 @@ export default function MonthlySpending() {
                 {monthly.expenses.length === 0
                     ? <div className="empty-state">No expenses yet</div>
                     : monthly.expenses.slice().reverse().map(exp => (
-                        <div key={exp.id} className="list-item">
+                        <div key={exp.id} className="list-item" style={exp.isRecurring ? { borderLeft: '2px solid var(--purple, #a78bfa)', paddingLeft: 10 } : {}}>
                             <div className="list-item-info">
-                                <div className="list-item-name">{exp.name}</div>
+                                <div className="list-item-name">
+                                    {exp.isRecurring && <span title="Auto-deducted recurring payment" style={{ marginRight: 5, fontSize: '0.75em', opacity: 0.8 }}>🔁</span>}
+                                    {exp.name}
+                                </div>
                                 <div className="list-item-meta">{new Date(exp.date).toLocaleDateString()}</div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                 <span style={{ fontWeight: 700 }}>{exp.amount.toLocaleString()} {cur}</span>
-                                <button className="btn btn-sm btn-ghost" aria-label="Delete Expense" onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })} style={{ color: 'var(--red)', padding: '2px 6px' }}>✕</button>
+                                {!exp.isRecurring && (
+                                    <button className="btn btn-sm btn-ghost" aria-label="Delete Expense" onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })} style={{ color: 'var(--red)', padding: '2px 6px' }}>✕</button>
+                                )}
                             </div>
                         </div>
                     ))

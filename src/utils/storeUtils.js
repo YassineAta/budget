@@ -1,7 +1,6 @@
+export { uid } from './uid';
 import { normalizeToMonthly } from './cashflow';
 
-let _idCounter = Date.now();
-export function uid() { return (++_idCounter).toString(36); }
 
 /**
  * Calculate the safety buffer's target amount.
