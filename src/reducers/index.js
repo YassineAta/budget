@@ -250,7 +250,7 @@ export function rootReducer(state, action) {
         period,
         cut_day: cutDay,
         start_date: now,
-        last_applied_date: lastApplied,
+        last_applied_date: action.expense.last_applied_date || lastApplied,
         active: true,
       };
       // Immediately apply any cuts that are already due (e.g. cut_day was yesterday)

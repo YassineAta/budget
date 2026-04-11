@@ -79,10 +79,27 @@ export default function MonthlySpending() {
                         <button className="btn btn-primary" aria-label="Add Expense" type="submit">+</button>
                     </div>
                 </form>
-                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                     {['Groceries', 'Transport', 'Coffee', 'Pharmacy'].map(s => (
                         <button key={s} className="btn btn-sm btn-ghost" onClick={() => setExpenseName(s)} style={{ fontSize: '0.7rem' }}>{s}</button>
                     ))}
+                    <div style={{ flex: 1 }} />
+                    <button 
+                        className="btn btn-sm btn-ghost" 
+                        onClick={() => {
+                            if (confirm('Add a test weekly payment (backdated 8 days) to verify auto-deduction?')) {
+                                // Set last_applied_date to 8 days ago, so a weekly cut (7 days) is due!
+                                const backdated = new Date(Date.now() - 8 * 86_400_000).toISOString();
+                                dispatch({ 
+                                    type: 'ADD_RECURRING_EXPENSE', 
+                                    expense: { name: 'Weekly Test', amount: 10, period: 'weekly', last_applied_date: backdated } 
+                                });
+                            }
+                        }}
+                        style={{ fontSize: '0.7rem', color: 'var(--purple)', border: '1px dashed var(--purple)', opacity: 0.8 }}
+                    >
+                        🧪 Hard Test (Weekly)
+                    </button>
                 </div>
             </div>
 

@@ -138,6 +138,35 @@ function loadState() {
         });
       }
 
+      // ── Migration 4: log recovery for "hidden" deductions ──────────────────
+      // If an expense was applied (last_applied_date > start_date) but is
+      // missing from the current month's expenses list, we add it back.
+      // This fixes the GYM payment that fired during the "date fix" deployment.
+      {
+        const currentMonth = s.monthly?.resetDate || new Date().toISOString().slice(0, 7);
+        const existingLogIds = new Set((s.monthly?.expenses || []).map(ex => ex.recurringId));
+        
+        s.recurringExpenses.forEach(e => {
+          if (!e.active || !e.last_applied_date || !e.start_date) return;
+          if (e.last_applied_date === e.start_date) return; // hasn't fired yet
+          
+          const lastMonth = e.last_applied_date.slice(0, 7);
+          if (lastMonth === currentMonth && !existingLogIds.has(e.id)) {
+            // It fired this month but isn't in the log! Recover it.
+            s.monthly.expenses.push({
+              id: uid(),
+              name: e.name,
+              amount: e.amount,
+              date: e.last_applied_date,
+              isRecurring: true,
+              recurringId: e.id,
+            });
+            // Also ensure it's counted in spent if it's in the current month
+            s.monthly.spent = Math.round(((s.monthly.spent || 0) + e.amount) * 100) / 100;
+          }
+        });
+      }
+
       // ── Remove legacy bufferLeveledUp flag if present ──────────────────────
       delete s.bufferLeveledUp;
 
