@@ -90,28 +90,33 @@ function loadState() {
       );
 
       // ── Migration 3: fix last_applied_date set to creation time (old bug) ──
-      // Expenses created with the old code had last_applied_date = creation time,
-      // which blocked the engine from ever seeing past cut dates as pending.
-      // We detect this by checking if last_applied_date is suspiciously close
-      // (within same day) to start_date AND last_applied_date falls on or after
-      // the expense's cut_day in the same month. If so, roll back one period.
+      // Old code: both start_date and last_applied_date were set to the exact
+      // same `now` string. The engine then saw all past cut_days as already
+      // applied and skipped to the next period, missing every cut since creation.
+      //
+      // Fix: if last_applied_date === start_date (same string, set in one shot),
+      // rewind last_applied_date to the cut date ONE PERIOD BEFORE start_date.
+      // This makes applyDueExpenses replay every missed cut from creation onward.
       {
         const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
         s.recurringExpenses = s.recurringExpenses.map(e => {
           if (!e.start_date || !e.last_applied_date) return e;
+          // Detect the buggy case: both fields are the same ISO string
+          if (e.last_applied_date !== e.start_date) return e;
+
           const start = new Date(e.start_date);
-          const last = new Date(e.last_applied_date);
-          // Only patch if last_applied_date is within 1 minute of start_date
-          // (i.e. it was set to "now" at creation time, not by the engine)
-          if (Math.abs(last - start) > 60_000) return e;
+
           if (e.period === 'monthly') {
-            let year = last.getFullYear();
-            let month = last.getMonth() - 1;
+            // Set last_applied_date to cut_day of the month BEFORE start_date.
+            // applyDueExpenses will then fire for every month from start_date onward.
+            let year = start.getFullYear();
+            let month = start.getMonth() - 1;
             if (month < 0) { month = 11; year -= 1; }
             const day = Math.min(e.cut_day || 1, daysInMonth(year, month));
             return { ...e, last_applied_date: new Date(year, month, day).toISOString() };
           } else if (e.period === 'weekly') {
-            return { ...e, last_applied_date: new Date(last.getTime() - 7 * 86_400_000).toISOString() };
+            // One week before start so the first cut fires 7 days after creation
+            return { ...e, last_applied_date: new Date(start.getTime() - 7 * 86_400_000).toISOString() };
           }
           return e;
         });
