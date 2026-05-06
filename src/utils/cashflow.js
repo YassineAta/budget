@@ -224,8 +224,51 @@ export function getFutureEvents(state, days, asOf = new Date()) {
 }
 
 /**
- * Project what the buffer balance will be after `days` days, accounting only
- * for scheduled recurring cuts (not manual one-time expenses).
+ * Build a merged drain timeline: scheduled recurring cuts + monthly survival
+ * spending. Time-aware: for the current month, only the unspent portion of
+ * the survival budget is drained (at end-of-month); future months drain the
+ * full survival budget on the 1st.
+ *
+ * @param {object} state
+ * @param {number} days
+ * @param {Date|string} [asOf]
+ * @returns {{ date: Date, amount: number, name: string }[]}
+ */
+export function getProjectedDrains(state, days, asOf = new Date()) {
+  const events = getFutureEvents(state, days, asOf).slice();
+  const now = new Date(asOf);
+  const end = new Date(now.getTime() + days * MS_PER_DAY);
+
+  const survivalBudget = state.monthly?.budget || 0;
+  if (survivalBudget > 0) {
+    // Current month: drain the remaining (un-spent) survival at end of month
+    const spentThisMonth = state.monthly?.spent || 0;
+    const remainingThisMonth = Math.max(0, survivalBudget - spentThisMonth);
+    const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 0);
+    if (remainingThisMonth > 0 && endOfThisMonth > now && endOfThisMonth <= end) {
+      events.push({ date: endOfThisMonth, amount: remainingThisMonth, name: 'Survival (this month)' });
+    }
+
+    // Future months: full survival drain on the 1st
+    let y = now.getFullYear();
+    let m = now.getMonth() + 1;
+    if (m > 11) { m = 0; y += 1; }
+    while (true) {
+      const monthStart = new Date(y, m, 1, 0, 1, 0);
+      if (monthStart > end) break;
+      events.push({ date: monthStart, amount: survivalBudget, name: 'Monthly survival' });
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+  }
+
+  events.sort((a, b) => a.date - b.date);
+  return events;
+}
+
+/**
+ * Project what the buffer balance will be after `days` days, accounting for
+ * scheduled recurring cuts AND the monthly survival budget.
  *
  * @param {object} state
  * @param {number} days
@@ -237,16 +280,16 @@ export function projectBalance(state, days, asOf = new Date()) {
   if (!buffer) return 0;
 
   let balance = buffer.saved;
-  for (const event of getFutureEvents(state, days, asOf)) {
+  for (const event of getProjectedDrains(state, days, asOf)) {
     balance -= event.amount;
   }
   return r2(Math.max(0, balance));
 }
 
 /**
- * Simulate forward in time to find the date the buffer will reach 0 based
- * solely on scheduled recurring cuts. Returns null if the buffer won't be
- * depleted within `maxDays`.
+ * Simulate forward in time to find the date the buffer will reach 0, based on
+ * scheduled recurring cuts AND the monthly survival budget. Returns null if
+ * the buffer won't be depleted within `maxDays`.
  *
  * @param {object} state
  * @param {number} [maxDays=730] how far to simulate (default: 2 years)
@@ -259,7 +302,7 @@ export function simulateRunout(state, maxDays = 730, asOf = new Date()) {
   if (buffer.saved <= 0) return new Date(asOf); // already depleted
 
   let balance = buffer.saved;
-  for (const event of getFutureEvents(state, maxDays, asOf)) {
+  for (const event of getProjectedDrains(state, maxDays, asOf)) {
     balance -= event.amount;
     if (balance <= 0) return event.date;
   }

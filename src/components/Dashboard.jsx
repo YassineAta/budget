@@ -7,10 +7,6 @@ import { simulateRunout, projectBalance, normalizeToMonthly } from '../utils/cas
 
 // ── Runout helper ─────────────────────────────────────────────────────────────
 function RunoutBadge({ state, cur }) {
-    const recurringExpenses = state.recurringExpenses || [];
-    const hasActive = recurringExpenses.some(e => e.active);
-    if (!hasActive) return null;
-
     const buffer = state.goals?.find(g => g.isBuffer);
     if (!buffer || buffer.saved <= 0) {
         return (
@@ -40,7 +36,7 @@ function RunoutBadge({ state, cur }) {
     return (
         <div style={{ fontSize: '0.72rem', color, marginBottom: 8, fontWeight: daysLeft < 90 ? 700 : 400 }}>
             {icon} Runs out in ~{daysLeft}d &nbsp;·&nbsp; <strong>{dateStr}</strong>
-            {daysLeft < 60 && <span style={{ fontSize: '0.65rem', opacity: 0.7 }}> (recurring cuts only)</span>}
+            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}> (incl. monthly budget)</span>
         </div>
     );
 }
