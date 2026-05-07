@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ls:*)",
+      "Bash(git log:*)",
+      "Bash(rtk npm:*)",
+      "Bash(rtk vitest:*)",
+      "Bash(xargs wc:*)",
+      "Bash(wc -l /e/budget/src/test/stress/*.js /e/budget/src/test/stress/*.jsx)",
+      "Bash(git -C /e/budget log --oneline)",
+      "Bash(rtk git:*)",
+      "Bash(git clone *)",
+      "Bash(./setup)"
+    ]
+  }
+}
