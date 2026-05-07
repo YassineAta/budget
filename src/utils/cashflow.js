@@ -228,8 +228,10 @@ export function getFutureEvents(state, days, asOf = new Date()) {
 
 /**
  * Build a merged drain timeline: scheduled recurring cuts + monthly survival
- * spending. Time-aware: survival is distributed as daily drains, so runout
- * reflects continuous spending instead of jumping at month boundaries.
+ * spending. Survival is drained at a constant daily rate (budget / 30.4375)
+ * starting from the next day after `asOf`. This matches the user's mental
+ * model: buffer / monthly_essentials = months of runway from today, regardless
+ * of where we are in the calendar month.
  *
  * @param {object} state
  * @param {number} days
@@ -243,44 +245,14 @@ export function getProjectedDrains(state, days, asOf = new Date()) {
 
   const survivalBudget = state.monthly?.budget || 0;
   if (survivalBudget > 0) {
-    // Current month: spread remaining survival across remaining days
-    const spentThisMonth = state.monthly?.spent || 0;
-    const remainingThisMonth = Math.max(0, survivalBudget - spentThisMonth);
-    const daysInThisMonth = getDaysInMonth(now.getFullYear(), now.getMonth());
-    const dayIdx = now.getDate();
-    const daysLeftInMonth = Math.max(1, daysInThisMonth - dayIdx + 1);
-    if (remainingThisMonth > 0) {
-      const dailyDrain = r2(remainingThisMonth / daysLeftInMonth);
-      let leftToDrain = remainingThisMonth;
-      for (let i = 0; i < daysLeftInMonth && leftToDrain > 0; i++) {
-        const day = new Date(now.getFullYear(), now.getMonth(), dayIdx + i, 23, 30, 0);
-        if (day <= now) continue;
+    const dailyRate = r2(survivalBudget / PERIOD_DAYS.monthly);
+    if (dailyRate > 0) {
+      const totalDays = Math.ceil((end - now) / MS_PER_DAY);
+      for (let i = 1; i <= totalDays; i++) {
+        const day = new Date(now.getTime() + i * MS_PER_DAY);
         if (day > end) break;
-        const amount = i === daysLeftInMonth - 1 ? r2(leftToDrain) : dailyDrain;
-        events.push({ date: day, amount, name: 'Survival (daily)' });
-        leftToDrain = r2(leftToDrain - amount);
+        events.push({ date: day, amount: dailyRate, name: 'Survival (daily)' });
       }
-    }
-
-    // Future months: spread full budget across that month's days
-    let y = now.getFullYear();
-    let m = now.getMonth() + 1;
-    if (m > 11) { m = 0; y += 1; }
-    while (true) {
-      const monthStart = new Date(y, m, 1);
-      if (monthStart > end) break;
-      const days = getDaysInMonth(y, m);
-      const dailyDrain = r2(survivalBudget / days);
-      let leftToDrain = survivalBudget;
-      for (let i = 0; i < days && leftToDrain > 0; i++) {
-        const day = new Date(y, m, i + 1, 23, 30, 0);
-        if (day > end) break;
-        const amount = i === days - 1 ? r2(leftToDrain) : dailyDrain;
-        events.push({ date: day, amount, name: 'Survival (daily)' });
-        leftToDrain = r2(leftToDrain - amount);
-      }
-      m += 1;
-      if (m > 11) { m = 0; y += 1; }
     }
   }
 
