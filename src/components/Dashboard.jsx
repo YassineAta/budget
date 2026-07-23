@@ -4,6 +4,7 @@ import ProgressBar from './ProgressBar';
 import GoalCard from './GoalCard';
 import { getRecommendation } from '../utils/financeAI';
 import { simulateRunout, projectBalance, normalizeToMonthly } from '../utils/cashflow';
+import { getSpendingInsights } from '../utils/spendingInsights';
 import {
     IconShield, IconShieldAlert, IconCheckCircle, IconAlertTriangle, IconAlertOctagon,
     IconCalendar, IconBrain, IconSparkles, IconArrowRight, IconCart, IconChart,
@@ -83,6 +84,14 @@ export default function Dashboard({ onTabChange }) {
     const readyGoals = goals.filter(g => !g.isBuffer && g.type !== 'wishlist' && g.saved >= g.target);
 
     const balanceColor = available < 50 ? 'text-red' : available < 150 ? 'text-yellow' : 'text-green';
+
+    // Learned spending behaviour → an "actual pace" runway alongside the budget-based one.
+    const insights = getSpendingInsights(state);
+    const learnedBurn = insights.learnedBurn;
+    const actualRunout = learnedBurn != null && available > 0
+        ? simulateRunout(state, 730, new Date(), learnedBurn)
+        : null;
+    const actualRunoutDays = actualRunout ? Math.ceil((actualRunout - new Date()) / DAY_MS) : null;
 
     return (
         <div>
@@ -229,6 +238,18 @@ export default function Dashboard({ onTabChange }) {
                         <div className="value text-blue">{Math.round(essentials)} {cur}</div>
                     </div>
                 </div>
+                {learnedBurn != null && (
+                    <div className="alert alert-info mt-3">
+                        <IconBrain />
+                        <span>
+                            Your actual spending averages <strong>{Math.round(learnedBurn).toLocaleString()} {cur}/mo</strong>.
+                            {actualRunoutDays != null
+                                ? <> At that pace your buffer lasts <strong>~{actualRunoutDays}d</strong>
+                                    {' '}({actualRunout.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}).</>
+                                : <> At that pace your buffer comfortably lasts over 2 years.</>}
+                        </span>
+                    </div>
+                )}
             </section>
 
             {/* Net Goal Progress */}

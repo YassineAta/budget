@@ -400,6 +400,30 @@ export function loadState() {
     // ── Remove legacy flags ───────────────────────────────────────────────────
     delete s.bufferLeveledUp;
 
+    // ── Dynamic monthly rollover (non-destructive) ────────────────────────────
+    // The billing period is tracked by monthly.resetDate (YYYY-MM). The expense
+    // ledger (monthly.expenses) is APPEND-ONLY and never cleared — full history is
+    // retained for analytics. When the calendar month advances past resetDate we
+    // only advance the pointer and RECOMPUTE monthly.spent from the ledger filtered
+    // to the new current month. This preserves the codebase invariant
+    // `spent === sum(current-month expenses)` while making "This Month's Spending"
+    // live instead of accumulating indefinitely across months.
+    try {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      if (s.monthly && s.monthly.resetDate !== currentMonth) {
+        const ledger = Array.isArray(s.monthly.expenses) ? s.monthly.expenses : [];
+        const spent = ledger.reduce(
+          (sum, e) => (typeof e?.date === 'string' && e.date.slice(0, 7) === currentMonth
+            ? sum + (Number(e.amount) || 0)
+            : sum),
+          0,
+        );
+        s.monthly = { ...s.monthly, resetDate: currentMonth, spent: Math.round(spent * 100) / 100 };
+      }
+    } catch (e) {
+      console.error('[store] monthly rollover failed:', e);
+    }
+
     // ── Recalculate buffer target ─────────────────────────────────────────────
     s.goals = s.goals.map(g => g.isBuffer ? { ...g, target: calculateBufferTarget(s) } : g);
 

@@ -193,12 +193,23 @@ export function rootReducer(state, action) {
       break;
     }
 
-    case 'RESET_MONTHLY':
+    case 'RESET_MONTHLY': {
+      // Non-destructive: the expense ledger is append-only history and is never
+      // erased. Resetting only re-anchors the billing period to the current month
+      // and recomputes the live spent counter from this month's ledger entries.
+      const ledger = Array.isArray(base.monthly?.expenses) ? base.monthly.expenses : [];
+      const spent = ledger.reduce(
+        (sum, e) => (typeof e?.date === 'string' && e.date.slice(0, 7) === thisMonth
+          ? sum + (Number(e.amount) || 0)
+          : sum),
+        0,
+      );
       next = {
         ...base,
-        monthly: { ...base.monthly, spent: 0, expenses: [], resetDate: thisMonth },
+        monthly: { ...base.monthly, spent: Math.round(spent * 100) / 100, resetDate: thisMonth },
       };
       break;
+    }
 
     // ── Recurring expense management ────────────────────────────────────────
 

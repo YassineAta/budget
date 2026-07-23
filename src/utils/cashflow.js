@@ -238,12 +238,15 @@ export function getFutureEvents(state, days, asOf = new Date()) {
  * @param {Date|string} [asOf]
  * @returns {{ date: Date, amount: number, name: string }[]}
  */
-export function getProjectedDrains(state, days, asOf = new Date()) {
+export function getProjectedDrains(state, days, asOf = new Date(), burnOverride = null) {
   const events = getFutureEvents(state, days, asOf).slice();
   const now = new Date(asOf);
   const end = new Date(now.getTime() + days * MS_PER_DAY);
 
-  const survivalBudget = state.monthly?.budget || 0;
+  // burnOverride lets callers project against learned actual monthly spend
+  // instead of the fixed survival budget. When null (default), behaviour is
+  // unchanged — the fixed monthly.budget drives the daily survival drain.
+  const survivalBudget = burnOverride != null ? burnOverride : (state.monthly?.budget || 0);
   if (survivalBudget > 0) {
     const dailyRate = r2(survivalBudget / PERIOD_DAYS.monthly);
     if (dailyRate > 0) {
@@ -269,12 +272,12 @@ export function getProjectedDrains(state, days, asOf = new Date()) {
  * @param {Date|string} [asOf] reference "now" (defaults to current time)
  * @returns {number}
  */
-export function projectBalance(state, days, asOf = new Date()) {
+export function projectBalance(state, days, asOf = new Date(), burnOverride = null) {
   const buffer = (state.goals || []).find(g => g.isBuffer);
   if (!buffer) return 0;
 
   let balance = buffer.saved;
-  for (const event of getProjectedDrains(state, days, asOf)) {
+  for (const event of getProjectedDrains(state, days, asOf, burnOverride)) {
     balance -= event.amount;
   }
   return r2(Math.max(0, balance));
@@ -290,13 +293,13 @@ export function projectBalance(state, days, asOf = new Date()) {
  * @param {Date|string} [asOf] reference "now" (defaults to current time)
  * @returns {Date|null}
  */
-export function simulateRunout(state, maxDays = 730, asOf = new Date()) {
+export function simulateRunout(state, maxDays = 730, asOf = new Date(), burnOverride = null) {
   const buffer = (state.goals || []).find(g => g.isBuffer);
   if (!buffer) return null;
   if (buffer.saved <= 0) return new Date(asOf); // already depleted
 
   let balance = buffer.saved;
-  for (const event of getProjectedDrains(state, maxDays, asOf)) {
+  for (const event of getProjectedDrains(state, maxDays, asOf, burnOverride)) {
     balance -= event.amount;
     if (balance <= 0) return event.date;
   }

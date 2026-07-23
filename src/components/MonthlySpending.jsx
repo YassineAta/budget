@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useStore } from '../store';
 import {
     IconWallet, IconBanknote, IconChart, IconEdit, IconCheck, IconX,
     IconPlus, IconTrash, IconAlertTriangle, IconRepeat,
 } from './icons';
+
+// Recharts is heavy (~200 kB gzip). Load it only when the Spending tab renders
+// so it never weighs down the initial dashboard bundle.
+const SpendingInsights = lazy(() => import('./SpendingInsights'));
 
 export default function MonthlySpending() {
     const { state, dispatch } = useStore();
@@ -11,6 +15,12 @@ export default function MonthlySpending() {
     const bufferGoal = goals.find(g => g.isBuffer);
     const available = bufferGoal ? bufferGoal.saved : 0;
     const cur = settings.currency;
+
+    // The ledger is append-only across months; this view shows the current month.
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const thisMonthExpenses = (monthly.expenses || []).filter(
+        e => typeof e.date === 'string' && e.date.slice(0, 7) === currentMonth,
+    );
 
     const [isEditing, setIsEditing] = useState(false);
     const [newBudget, setNewBudget] = useState(monthly.budget);
@@ -119,6 +129,11 @@ export default function MonthlySpending() {
                 )}
             </section>
 
+            {/* Behaviour analytics */}
+            <Suspense fallback={<section className="card subtle"><div className="empty-state">Loading insights…</div></section>}>
+                <SpendingInsights state={state} />
+            </Suspense>
+
             {/* Add Expense */}
             <section className="card">
                 <div className="card-title"><IconPlus /> Log Expense</div>
@@ -164,20 +179,17 @@ export default function MonthlySpending() {
                 </div>
             </section>
 
-            {/* Expense History */}
+            {/* Expense History (current month — full history is retained for insights) */}
             <section className="card">
                 <div className="flex-between mb-3">
-                    <div className="card-title" style={{ margin: 0 }}>Expenses</div>
-                    <button
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => { if (window.confirm('Reset monthly data?')) dispatch({ type: 'RESET_MONTHLY' }); }}
-                    >
-                        Reset Month
-                    </button>
+                    <div className="card-title" style={{ margin: 0 }}>This Month's Expenses</div>
+                    <span className="text-muted mono" style={{ fontSize: 'var(--text-xs)' }}>
+                        {thisMonthExpenses.length} item{thisMonthExpenses.length === 1 ? '' : 's'}
+                    </span>
                 </div>
-                {monthly.expenses.length === 0
-                    ? <div className="empty-state">No expenses yet</div>
-                    : monthly.expenses.slice().reverse().map(exp => (
+                {thisMonthExpenses.length === 0
+                    ? <div className="empty-state">No expenses yet this month</div>
+                    : thisMonthExpenses.slice().reverse().map(exp => (
                         <div key={exp.id} className={`list-item ${exp.isRecurring ? 'recurring' : ''}`}>
                             <div className="list-item-info">
                                 <div className="list-item-name row-tight">
