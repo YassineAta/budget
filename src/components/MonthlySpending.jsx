@@ -2,12 +2,18 @@ import { useState, lazy, Suspense } from 'react';
 import { useStore } from '../store';
 import {
     IconWallet, IconBanknote, IconChart, IconEdit, IconCheck, IconX,
-    IconPlus, IconTrash, IconAlertTriangle, IconRepeat,
+    IconPlus, IconTrash, IconAlertTriangle, IconRepeat, IconArrowRight,
 } from './icons';
 
 // Recharts is heavy (~200 kB gzip). Load it only when the Spending tab renders
 // so it never weighs down the initial dashboard bundle.
 const SpendingInsights = lazy(() => import('./SpendingInsights'));
+
+/** "2026-07" → "July 2026" (built from parts to avoid timezone drift). */
+function monthLabel(key) {
+    const [y, m] = key.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+}
 
 export default function MonthlySpending() {
     const { state, dispatch } = useStore();
@@ -16,11 +22,21 @@ export default function MonthlySpending() {
     const available = bufferGoal ? bufferGoal.saved : 0;
     const cur = settings.currency;
 
-    // The ledger is append-only across months; this view shows the current month.
+    // The ledger is append-only across all months. Browse any month here; the
+    // full history also powers the insights above.
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const thisMonthExpenses = (monthly.expenses || []).filter(
-        e => typeof e.date === 'string' && e.date.slice(0, 7) === currentMonth,
+    const ledger = monthly.expenses || [];
+    const monthsWithData = Array.from(
+        new Set(ledger.filter(e => typeof e.date === 'string').map(e => e.date.slice(0, 7))),
     );
+    const browsableMonths = Array.from(new Set([...monthsWithData, currentMonth])).sort(); // ascending
+    const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+    // Selected month may vanish after deletes — fall back to the current month.
+    const activeMonth = browsableMonths.includes(selectedMonth) ? selectedMonth : currentMonth;
+    const monthIdx = browsableMonths.indexOf(activeMonth);
+    const monthExpenses = ledger.filter(e => e.date?.slice(0, 7) === activeMonth);
+    const monthTotal = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const isCurrentMonth = activeMonth === currentMonth;
 
     const [isEditing, setIsEditing] = useState(false);
     const [newBudget, setNewBudget] = useState(monthly.budget);
@@ -179,17 +195,38 @@ export default function MonthlySpending() {
                 </div>
             </section>
 
-            {/* Expense History (current month — full history is retained for insights) */}
+            {/* Expense History — browse any month; the ledger keeps full history */}
             <section className="card">
                 <div className="flex-between mb-3">
-                    <div className="card-title" style={{ margin: 0 }}>This Month's Expenses</div>
-                    <span className="text-muted mono" style={{ fontSize: 'var(--text-xs)' }}>
-                        {thisMonthExpenses.length} item{thisMonthExpenses.length === 1 ? '' : 's'}
+                    <div className="row-tight">
+                        <button
+                            className="btn btn-sm btn-ghost btn-icon"
+                            aria-label="Previous month"
+                            disabled={monthIdx <= 0}
+                            onClick={() => setSelectedMonth(browsableMonths[monthIdx - 1])}
+                        >
+                            <IconArrowRight style={{ transform: 'rotate(180deg)' }} />
+                        </button>
+                        <div className="card-title" style={{ margin: 0, minWidth: 128, textAlign: 'center' }}>
+                            {monthLabel(activeMonth)}
+                            {isCurrentMonth && <span className="text-muted" style={{ fontWeight: 400 }}> · now</span>}
+                        </div>
+                        <button
+                            className="btn btn-sm btn-ghost btn-icon"
+                            aria-label="Next month"
+                            disabled={monthIdx >= browsableMonths.length - 1}
+                            onClick={() => setSelectedMonth(browsableMonths[monthIdx + 1])}
+                        >
+                            <IconArrowRight />
+                        </button>
+                    </div>
+                    <span className="mono text-muted" style={{ fontSize: 'var(--text-xs)' }}>
+                        {Math.round(monthTotal).toLocaleString()} {cur}
                     </span>
                 </div>
-                {thisMonthExpenses.length === 0
-                    ? <div className="empty-state">No expenses yet this month</div>
-                    : thisMonthExpenses.slice().reverse().map(exp => (
+                {monthExpenses.length === 0
+                    ? <div className="empty-state">No expenses in {monthLabel(activeMonth)}</div>
+                    : monthExpenses.slice().reverse().map(exp => (
                         <div key={exp.id} className={`list-item ${exp.isRecurring ? 'recurring' : ''}`}>
                             <div className="list-item-info">
                                 <div className="list-item-name row-tight">
@@ -206,18 +243,23 @@ export default function MonthlySpending() {
                             </div>
                             <div className="row">
                                 <span className="list-item-amount">{exp.amount.toLocaleString()} {cur}</span>
-                                <button
-                                    className="btn btn-sm btn-ghost btn-icon"
-                                    aria-label={`Delete ${exp.name}`}
-                                    onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
-                                    style={{ color: 'var(--red)' }}
-                                >
-                                    <IconTrash />
-                                </button>
+                                {isCurrentMonth && (
+                                    <button
+                                        className="btn btn-sm btn-ghost btn-icon"
+                                        aria-label={`Delete ${exp.name}`}
+                                        onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
+                                        style={{ color: 'var(--red)' }}
+                                    >
+                                        <IconTrash />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))
                 }
+                {!isCurrentMonth && monthExpenses.length > 0 && (
+                    <div className="card-sub mt-2" style={{ textAlign: 'center' }}>Past months are read-only history.</div>
+                )}
             </section>
         </div>
     );

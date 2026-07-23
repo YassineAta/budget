@@ -185,10 +185,17 @@ export function rootReducer(state, action) {
       const exp = base.monthly.expenses.find(e => e.id === action.id);
       if (!exp) return base;
       const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: g.saved + exp.amount } : g);
+      // The spent counter only tracks the current month — deleting a historical
+      // ledger entry must not distort it.
+      const inCurrentMonth = typeof exp.date === 'string' && exp.date.slice(0, 7) === thisMonth;
       next = {
         ...base,
         goals,
-        monthly: { ...base.monthly, spent: base.monthly.spent - exp.amount, expenses: base.monthly.expenses.filter(e => e.id !== action.id) },
+        monthly: {
+          ...base.monthly,
+          spent: inCurrentMonth ? base.monthly.spent - exp.amount : base.monthly.spent,
+          expenses: base.monthly.expenses.filter(e => e.id !== action.id),
+        },
       };
       break;
     }
