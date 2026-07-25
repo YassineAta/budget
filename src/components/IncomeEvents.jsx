@@ -12,6 +12,8 @@ const DAY_MS = 86_400_000;
 
 const TYPE_META = {
     survival:        { color: 'var(--yellow)', label: 'Survival needs',        Icon: IconWallet },
+    buffer:          { color: 'var(--yellow)', label: 'Safety buffer',         Icon: IconShield },
+    priority:        { color: 'var(--blue)',   label: 'Priority reserve',      Icon: IconTarget },
     urgent:          { color: 'var(--red)',    label: 'Urgent / overdue',     Icon: IconAlertOctagon },
     deadline:        { color: 'var(--blue)',   label: 'Deadline installment', Icon: IconCalendar },
     'high-priority': { color: 'var(--green)',  label: 'High priority',        Icon: IconTarget },

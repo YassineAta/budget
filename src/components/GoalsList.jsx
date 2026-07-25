@@ -32,6 +32,7 @@ export default function GoalsList() {
     const [category, setCategory] = useState('Comfort');
     const [targetDate, setTargetDate] = useState('');
     const [goalType, setGoalType] = useState('saving');
+    const [isPriority, setIsPriority] = useState(false);
 
     const [recName, setRecName] = useState('');
     const [recAmount, setRecAmount] = useState('');
@@ -43,8 +44,12 @@ export default function GoalsList() {
     const [moveAmt, setMoveAmt] = useState('');
 
     const bufferGoal = goals.find(g => g.isBuffer);
+    const priorityGoals = useMemo(
+        () => goals.filter(g => g.isPriority && !g.isBuffer && g.type !== 'wishlist'),
+        [goals],
+    );
     const savingGoals = useMemo(() => {
-        const list = goals.filter(g => !g.isBuffer && g.type !== 'wishlist');
+        const list = goals.filter(g => !g.isBuffer && !g.isPriority && g.type !== 'wishlist');
         return [...list].sort((a, b) => {
             if (sort === 'priority') return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
             if (sort === 'funded') {
@@ -78,10 +83,11 @@ export default function GoalsList() {
                 category,
                 targetDate,
                 type: goalType,
+                isPriority: goalType === 'saving' && isPriority,
             },
         });
         setName(''); setTarget(''); setPriority('Medium'); setCategory('Comfort');
-        setTargetDate(''); setGoalType('saving');
+        setTargetDate(''); setGoalType('saving'); setIsPriority(false);
         setShowAddSaving(false);
     }
 
@@ -220,6 +226,22 @@ export default function GoalsList() {
                                 <option value="wishlist">Wishlist (no balance effect)</option>
                             </select>
                         </div>
+                        {goalType === 'saving' && (
+                            <label className="row mt-2" style={{ cursor: 'pointer', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={isPriority}
+                                    onChange={e => setIsPriority(e.target.checked)}
+                                    style={{ marginTop: 3 }}
+                                />
+                                <span>
+                                    <span style={{ fontWeight: 600 }}>⭐ Priority reserve</span>
+                                    <span className="text-dim" style={{ display: 'block', fontSize: 'var(--text-xs)' }}>
+                                        Funded from its own bucket alongside the buffer, before other goals.
+                                    </span>
+                                </span>
+                            </label>
+                        )}
                         <button className="btn btn-primary mt-4 w-full" type="submit">
                             <IconPlus /> Create Goal
                         </button>

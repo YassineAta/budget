@@ -8,6 +8,8 @@ export const goalSchema = z.object({
   priority: z.enum(['High', 'Medium', 'Low']).optional(),
   category: z.string().optional(),
   isBuffer: z.boolean().optional(),
+  /** Priority reserve: funded from its own bucket alongside the buffer, before other goals. */
+  isPriority: z.boolean().optional(),
   isRecurring: z.boolean().optional(),
   monthlyCost: z.number().min(0).optional(),
   targetDate: z.string().optional(),
