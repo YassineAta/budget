@@ -86,5 +86,15 @@ describe('storeUtils', () => {
             });
             expect(calculateBufferTarget(state)).toBe(900); // (200 + 100) * 3
         });
+
+        it('falls back to declared essentials when there is no spending history', () => {
+            // makeState has no monthly.expenses → weighted burn is null → the
+            // buffer sits on the declared-essentials floor, unchanged from before.
+            const state = makeState({ budget: 300, safetyMonths: 3 });
+            expect(calculateBufferTarget(state)).toBe(900);
+        });
+        // The adaptive (realised-spend-driven) path is covered deterministically
+        // by getWeightedMonthlyBurn tests, which pass an explicit asOf. It is not
+        // re-tested here because calculateBufferTarget reads the real clock.
     });
 });

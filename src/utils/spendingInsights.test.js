@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   monthKey, categorize, groupByMonth, getMonthlySeries, getLearnedMonthlyBurn,
+  getWeightedMonthlyBurn,
   getMonthOverMonth, getPaceSignal, getCategoryBreakdown, getAnomalies, getSpendingInsights,
 } from './spendingInsights';
 
@@ -84,6 +85,38 @@ describe('getLearnedMonthlyBurn', () => {
   it('skips empty months rather than averaging in zeros', () => {
     const ledger = [exp('x', 300, 2026, 6, 10)]; // only Jun has data
     expect(getLearnedMonthlyBurn(ledger, { asOf: NOW })).toBe(300);
+  });
+});
+
+describe('getWeightedMonthlyBurn', () => {
+  it('weights recent completed months more heavily than older ones', () => {
+    // Apr 100, May 100, Jun 400 (Jul current, excluded). With decay 0.5 over
+    // 3 completed months the newest (Jun) dominates, so the weighted average
+    // sits well above the flat mean of 200.
+    const ledger = [
+      exp('a', 100, 2026, 4, 10),
+      exp('b', 100, 2026, 5, 10),
+      exp('c', 400, 2026, 6, 10),
+      exp('now', 40, 2026, 7, 5), // current, excluded
+    ];
+    const flat = getLearnedMonthlyBurn(ledger, { asOf: NOW }); // 200
+    const weighted = getWeightedMonthlyBurn(ledger, { asOf: NOW });
+    // weights newest→oldest: 1, .5, .25 → (400 + 50 + 25) / 1.75 ≈ 271.43
+    expect(weighted).toBeCloseTo(271.43, 1);
+    expect(weighted).toBeGreaterThan(flat);
+  });
+  it('excludes the current partial month', () => {
+    const ledger = [
+      exp('jun', 300, 2026, 6, 10),
+      exp('now', 9999, 2026, 7, 5), // huge current month must not leak in
+    ];
+    expect(getWeightedMonthlyBurn(ledger, { asOf: NOW })).toBe(300);
+  });
+  it('returns null with no completed-month history', () => {
+    expect(getWeightedMonthlyBurn([exp('now', 40, 2026, 7, 5)], { asOf: NOW })).toBeNull();
+  });
+  it('equals the single value when only one completed month has data', () => {
+    expect(getWeightedMonthlyBurn([exp('jun', 250, 2026, 6, 10)], { asOf: NOW })).toBe(250);
   });
 });
 

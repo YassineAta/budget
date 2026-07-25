@@ -1,21 +1,29 @@
 export { uid } from './uid';
 import { normalizeToMonthly } from './cashflow';
+import { getWeightedMonthlyBurn } from './spendingInsights';
 
 
 /**
- * Calculate the safety buffer's target amount.
- * Target = (monthly survival budget + all active recurring costs, normalised to
- * monthly) × safetyMonths.
+ * Calculate the safety buffer's target amount — now adaptive.
  *
- * Reads from state.recurringExpenses (new model). Falls back gracefully to 0
- * when the array is absent (fresh state before migration).
+ * Target = needs × safetyMonths, where `needs` follows the user's actual
+ * behaviour instead of a static figure:
+ *   needs = max( recency-weighted average of realised monthly spend,
+ *                declared survival essentials (budget + active recurring) )
+ *
+ * The weighted average (see getWeightedMonthlyBurn) leans on recent months so
+ * the buffer "follows" the user. Recurring cuts are already logged in the
+ * ledger, so realised spend is directly comparable to declared essentials — no
+ * double-counting. The declared essentials act as a floor: the buffer adapts
+ * upward toward real spending but never drops below the stated survival need.
+ *
+ * Falls back to declared essentials when there is no completed-month history.
  */
 export function calculateBufferTarget(state) {
-  const needs = state.monthly?.budget || 200;
-  const recurring = (state.recurringExpenses || [])
-    .filter(e => e.active)
-    .reduce((s, e) => s + normalizeToMonthly(e), 0);
-  return (needs + recurring) * (state.safetyMonths || 3);
+  const declared = monthlyEssentials(state);
+  const learned = getWeightedMonthlyBurn(state.monthly?.expenses || []);
+  const needs = learned != null ? Math.max(learned, declared) : declared;
+  return needs * (state.safetyMonths || 3);
 }
 
 /**

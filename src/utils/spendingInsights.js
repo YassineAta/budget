@@ -90,6 +90,36 @@ export function getLearnedMonthlyBurn(expenses, opts = {}) {
   return round2(prior.reduce((s, x) => s + x.total, 0) / prior.length);
 }
 
+/**
+ * Recency-weighted monthly burn: a weighted average of spend across the last
+ * `window` COMPLETED months (the current, partial month is excluded). The most
+ * recent completed month carries the most weight; older months decay
+ * geometrically by `decay` (0.5 → each month counts half as much as the newer
+ * one after it). Weights are normalised over whatever completed months actually
+ * have data, so a user with only one month of history isn't dragged toward zero.
+ * Returns null when there is no completed-month history yet.
+ *
+ * With the defaults (window 4, decay 0.5) a full history weights the months
+ * roughly 53 / 27 / 13 / 7 % from newest to oldest — a projection that follows
+ * recent behaviour without over-reacting to a single unusual month.
+ */
+export function getWeightedMonthlyBurn(expenses, opts = {}) {
+  const { window = 4, decay = 0.5, asOf = new Date() } = opts;
+  const series = getMonthlySeries(expenses, window + 1, asOf); // +1 for the current (excluded) month
+  const prior = series.slice(0, -1).filter(s => s.count > 0);  // completed months with data, oldest→newest
+  if (prior.length === 0) return null;
+  let weightSum = 0;
+  let acc = 0;
+  // Walk newest→oldest so the latest completed month gets weight decay^0 = 1.
+  for (let i = 0; i < prior.length; i++) {
+    const s = prior[prior.length - 1 - i];
+    const w = Math.pow(decay, i);
+    acc += s.total * w;
+    weightSum += w;
+  }
+  return round2(acc / weightSum);
+}
+
 /** Month-over-month change from the last two entries of a series. */
 export function getMonthOverMonth(series) {
   if (!series || series.length < 2) return null;
@@ -201,6 +231,7 @@ export function getSpendingInsights(state, asOf = new Date(), months = 6) {
     series,
     mom: getMonthOverMonth(series),
     learnedBurn: getLearnedMonthlyBurn(expenses, { asOf }),
+    weightedBurn: getWeightedMonthlyBurn(expenses, { asOf }),
     pace: getPaceSignal(expenses, { asOf, budget }),
     categories: getCategoryBreakdown(expenses, { asOf }),
     anomalies: getAnomalies(expenses, { asOf }),

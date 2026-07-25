@@ -1,5 +1,7 @@
 import { useState, lazy, Suspense } from 'react';
 import { useStore } from '../store';
+import { monthlyEssentials } from '../utils/storeUtils';
+import { getWeightedMonthlyBurn } from '../utils/spendingInsights';
 import {
     IconWallet, IconBanknote, IconChart, IconEdit, IconCheck, IconX,
     IconPlus, IconTrash, IconAlertTriangle, IconRepeat, IconArrowRight,
@@ -42,6 +44,13 @@ export default function MonthlySpending() {
     const [newBudget, setNewBudget] = useState(monthly.budget);
     const [expenseName, setExpenseName] = useState('');
     const [expenseAmt, setExpenseAmt] = useState('');
+
+    // Adaptive buffer basis: the recency-weighted average of realised monthly
+    // spend, floored at declared survival essentials. Surfaced so the user can
+    // see what the (now dynamic) buffer target is actually tracking.
+    const essentials = monthlyEssentials(state);
+    const adaptiveBurn = getWeightedMonthlyBurn(monthly.expenses || []);
+    const isAdaptive = adaptiveBurn != null && adaptiveBurn > essentials;
 
     const pct = monthly.budget > 0 ? (monthly.spent / monthly.budget) * 100 : 0;
     const spentColor = pct > 100 ? 'text-red' : '';
@@ -102,7 +111,12 @@ export default function MonthlySpending() {
                         </div>
                     )
                 }
-                <div className="card-sub">Drives the buffer target. Changing it updates the buffer instantly.</div>
+                <div className="card-sub">
+                    {isAdaptive
+                        ? <>Buffer now tracks your recent spending — a recency-weighted average of <strong>~{Math.round(adaptiveBurn).toLocaleString()} {cur}/mo</strong>, above this floor. It follows your habits and never drops below your survival needs.</>
+                        : <>Drives the buffer target as a floor. Once your logged months average more than this, the buffer adapts up to follow your real spending.</>
+                    }
+                </div>
             </section>
 
             {/* Available Balance */}
