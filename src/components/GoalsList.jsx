@@ -276,6 +276,19 @@ export default function GoalsList() {
                 </>
             )}
 
+            {/* Priority Reserve */}
+            {priorityGoals.length > 0 && (
+                <>
+                    <div className="section-title">
+                        <IconFlame /> Priority Reserve{' '}
+                        <span className="text-dim" style={{ fontWeight: 400 }}>(funded before other goals)</span>
+                    </div>
+                    <div className="goals-grid">
+                        {priorityGoals.map(goal => <GoalCard key={goal.id} goal={goal} />)}
+                    </div>
+                </>
+            )}
+
             {/* Recurring */}
             <div className="flex-between" style={{ marginTop: 'var(--space-5)', marginBottom: 'var(--space-2)' }}>
                 <div className="section-title" style={{ margin: 0 }}><IconRepeat /> Recurring Expenses</div>
