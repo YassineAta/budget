@@ -44,6 +44,7 @@ export default function MonthlySpending() {
     const [newBudget, setNewBudget] = useState(monthly.budget);
     const [expenseName, setExpenseName] = useState('');
     const [expenseAmt, setExpenseAmt] = useState('');
+    const [expenseDate, setExpenseDate] = useState('');
 
     // Adaptive buffer basis: the recency-weighted average of realised monthly
     // spend, floored at declared survival essentials. Surfaced so the user can
@@ -171,8 +172,15 @@ export default function MonthlySpending() {
                     e.preventDefault();
                     const amt = parseFloat(expenseAmt);
                     if (!expenseName.trim() || !amt || amt <= 0) return;
-                    dispatch({ type: 'ADD_EXPENSE', name: expenseName.trim(), amount: amt });
-                    setExpenseName(''); setExpenseAmt('');
+                    
+                    let finalDate;
+                    if (expenseDate) {
+                        const [y, m, d] = expenseDate.split('-');
+                        finalDate = new Date(y, m - 1, d, 12).toISOString();
+                    }
+
+                    dispatch({ type: 'ADD_EXPENSE', name: expenseName.trim(), amount: amt, date: finalDate });
+                    setExpenseName(''); setExpenseAmt(''); setExpenseDate('');
                 }}>
                     <div className="input-row">
                         <input
@@ -190,6 +198,13 @@ export default function MonthlySpending() {
                             onChange={e => setExpenseAmt(e.target.value)}
                             min="0"
                             style={{ maxWidth: 110 }}
+                        />
+                        <input
+                            type="date"
+                            aria-label="Expense date"
+                            value={expenseDate}
+                            onChange={e => setExpenseDate(e.target.value)}
+                            style={{ maxWidth: 130 }}
                         />
                         <button className="btn btn-primary btn-icon" aria-label="Add expense" type="submit">
                             <IconPlus />
@@ -257,16 +272,14 @@ export default function MonthlySpending() {
                             </div>
                             <div className="row">
                                 <span className="list-item-amount">{exp.amount.toLocaleString()} {cur}</span>
-                                {isCurrentMonth && (
-                                    <button
-                                        className="btn btn-sm btn-ghost btn-icon"
-                                        aria-label={`Delete ${exp.name}`}
-                                        onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
-                                        style={{ color: 'var(--red)' }}
-                                    >
-                                        <IconTrash />
-                                    </button>
-                                )}
+                                <button
+                                    className="btn btn-sm btn-ghost btn-icon"
+                                    aria-label={`Delete ${exp.name}`}
+                                    onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
+                                    style={{ color: 'var(--red)' }}
+                                >
+                                    <IconTrash />
+                                </button>
                             </div>
                         </div>
                     ))

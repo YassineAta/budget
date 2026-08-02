@@ -171,12 +171,18 @@ export function rootReducer(state, action) {
 
     case 'ADD_EXPENSE': {
       const name = action.name ? DOMPurify.sanitize(action.name) : 'Unknown Expense';
-      const exp = { id: uid(), name, amount: action.amount, date: new Date().toISOString() };
+      const date = action.date || new Date().toISOString();
+      const exp = { id: uid(), name, amount: action.amount, date };
       const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: Math.max(0, g.saved - action.amount) } : g);
+      const inCurrentMonth = typeof date === 'string' && date.slice(0, 7) === thisMonth;
       next = {
         ...base,
         goals,
-        monthly: { ...base.monthly, spent: base.monthly.spent + action.amount, expenses: [...base.monthly.expenses, exp] },
+        monthly: { 
+          ...base.monthly, 
+          spent: inCurrentMonth ? base.monthly.spent + action.amount : base.monthly.spent, 
+          expenses: [...base.monthly.expenses, exp] 
+        },
       };
       break;
     }
