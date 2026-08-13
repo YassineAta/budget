@@ -348,6 +348,17 @@ export function getSeasonalRunoutDate(bufferAmount, expenses, declaredMonthly, o
   const seasonal = getSeasonalBurn(expenses, { asOf, historicalSeasons, growthRate });
   const recency  = getWeightedMonthlyBurn(expenses, { asOf });
 
+  // eslint-disable-next-line no-console
+  console.log('[seasonal-runout] debug', {
+    bufferAmount,
+    declaredMonthly,
+    historicalCount: historicalSeasons.length,
+    growthRate,
+    summer: seasonal.summer,
+    school: seasonal.school,
+    recency,
+  });
+
   let remaining = bufferAmount;
   const ref = new Date(asOf);
 
