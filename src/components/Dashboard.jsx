@@ -3,8 +3,8 @@ import { useStore, monthlyEssentials } from '../store';
 import ProgressBar from './ProgressBar';
 import GoalCard from './GoalCard';
 import { getRecommendation } from '../utils/financeAI';
-import { simulateRunout, projectBalance, normalizeToMonthly } from '../utils/cashflow';
-import { getSpendingInsights } from '../utils/spendingInsights';
+import { projectBalance, normalizeToMonthly } from '../utils/cashflow';
+import { getSpendingInsights, getSeasonalRunoutDate } from '../utils/spendingInsights';
 import {
     IconShield, IconShieldAlert, IconCheckCircle, IconAlertTriangle, IconAlertOctagon,
     IconCalendar, IconBrain, IconSparkles, IconArrowRight, IconCart, IconChart,
@@ -24,7 +24,14 @@ function RunoutBadge({ state, cur }) {
         );
     }
 
-    const runout = simulateRunout(state);
+    const expenses = state.monthly?.expenses || [];
+    const declared = (state.monthly?.budget || 200) +
+        (state.recurringExpenses || []).filter(e => e.active).reduce((s, e) => s + normalizeToMonthly(e), 0);
+    const historicalSeasons = state.historicalSeasons || [];
+    const growthRate = state.historicalGrowthRate ?? 0;
+    const runout = getSeasonalRunoutDate(buffer.saved, expenses, declared, {
+        historicalSeasons, growthRate,
+    });
     const now = new Date();
 
     if (!runout) {
@@ -47,7 +54,7 @@ function RunoutBadge({ state, cur }) {
         <div className={`runout ${tone}`}>
             <Icon />
             <span>Runs out in ~{daysLeft}d · <strong>{dateStr}</strong></span>
-            <span className="flex-auto runout-hint">incl. budget</span>
+            <span className="flex-auto runout-hint">seasonal forecast</span>
         </div>
     );
 }
@@ -85,13 +92,15 @@ export default function Dashboard({ onTabChange }) {
 
     const balanceColor = available < 50 ? 'text-red' : available < 150 ? 'text-yellow' : 'text-green';
 
-    // Learned spending behaviour → an "actual pace" runway alongside the budget-based one.
     const insights = getSpendingInsights(state);
-    const learnedBurn = insights.learnedBurn;
-    const actualRunout = learnedBurn != null && available > 0
-        ? simulateRunout(state, 730, new Date(), learnedBurn)
+    // weightedBurn already includes recurring spend — divide directly to avoid double-counting.
+    const weightedBurn = insights.weightedBurn;
+    const actualRunoutDays = weightedBurn != null && weightedBurn > 0 && available > 0
+        ? Math.ceil(available / weightedBurn * 30.4375)
         : null;
-    const actualRunoutDays = actualRunout ? Math.ceil((actualRunout - new Date()) / DAY_MS) : null;
+    const actualRunout = actualRunoutDays != null
+        ? new Date(Date.now() + actualRunoutDays * DAY_MS)
+        : null;
 
     return (
         <div>
@@ -238,15 +247,15 @@ export default function Dashboard({ onTabChange }) {
                         <div className="value text-blue">{Math.round(essentials)} {cur}</div>
                     </div>
                 </div>
-                {learnedBurn != null && (
+                {weightedBurn != null && (
                     <div className="alert alert-info mt-3">
                         <IconBrain />
                         <span>
-                            Your actual spending averages <strong>{Math.round(learnedBurn).toLocaleString()} {cur}/mo</strong>.
+                            Your recency-weighted spend is <strong>{Math.round(weightedBurn).toLocaleString()} {cur}/mo</strong>.
                             {actualRunoutDays != null
                                 ? <> At that pace your buffer lasts <strong>~{actualRunoutDays}d</strong>
                                     {' '}({actualRunout.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}).</>
-                                : <> At that pace your buffer comfortably lasts over 2 years.</>}
+                                : <> Your buffer comfortably lasts over 2 years at this pace.</>}
                         </span>
                     </div>
                 )}

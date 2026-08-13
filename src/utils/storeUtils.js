@@ -1,29 +1,33 @@
 export { uid } from './uid';
 import { normalizeToMonthly } from './cashflow';
-import { getWeightedMonthlyBurn } from './spendingInsights';
+import { getProjectedBurnForPeriod } from './spendingInsights';
 
 
 /**
- * Calculate the safety buffer's target amount — now adaptive.
+ * Calculate the safety buffer's target amount — forward-projected and seasonal.
  *
- * Target = needs × safetyMonths, where `needs` follows the user's actual
- * behaviour instead of a static figure:
- *   needs = max( recency-weighted average of realised monthly spend,
- *                declared survival essentials (budget + active recurring) )
+ * Rather than extrapolating a flat burn rate (rate × months), this sums the
+ * predicted spend for each of the UPCOMING safetyMonths calendar months:
+ *   per-month prediction = seasonal avg (summer or school-year) › recency-
+ *                          weighted avg › declared essentials floor
  *
- * The weighted average (see getWeightedMonthlyBurn) leans on recent months so
- * the buffer "follows" the user. Recurring cuts are already logged in the
- * ledger, so realised spend is directly comparable to declared essentials — no
- * double-counting. The declared essentials act as a floor: the buffer adapts
- * upward toward real spending but never drops below the stated survival need.
- *
- * Falls back to declared essentials when there is no completed-month history.
+ * This means a season flip in the upcoming window is reflected immediately: if
+ * the next 3 months are school months the target uses school-year spending even
+ * if the user is currently in a high-spend summer — eliminating the 3-4 month
+ * lag of the old backward-looking approach and giving an accurate "safe until"
+ * date. The declared-essentials floor (per month × safetyMonths) prevents the
+ * buffer from ever dropping below stated survival needs.
  */
 export function calculateBufferTarget(state) {
   const declared = monthlyEssentials(state);
-  const learned = getWeightedMonthlyBurn(state.monthly?.expenses || []);
-  const needs = learned != null ? Math.max(learned, declared) : declared;
-  return needs * (state.safetyMonths || 3);
+  const expenses = state.monthly?.expenses || [];
+  const months = state.safetyMonths || 3;
+  const historicalSeasons = state.historicalSeasons || [];
+  const growthRate = state.historicalGrowthRate ?? 0;
+  const projected = getProjectedBurnForPeriod(expenses, months, {
+    fallback: declared, historicalSeasons, growthRate,
+  });
+  return Math.max(projected, declared * months);
 }
 
 /**
@@ -41,11 +45,13 @@ export function monthlyEssentials(state) {
 export function getMonthlySaving(goal) {
   if (!goal.targetDate || goal.saved >= goal.target) return null;
   const now = new Date();
-  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const curY = now.getUTCFullYear();
+  const curM = now.getUTCMonth();
   const [tYear, tMonth] = goal.targetDate.split('-');
-  const targetDateObj = new Date(parseInt(tYear, 10), parseInt(tMonth, 10) - 1, 1);
+  const tY = parseInt(tYear, 10);
+  const tM = parseInt(tMonth, 10) - 1;
 
-  const monthsDiff = (targetDateObj.getFullYear() - currentMonth.getFullYear()) * 12 + (targetDateObj.getMonth() - currentMonth.getMonth());
+  const monthsDiff = (tY - curY) * 12 + (tM - curM);
 
   if (monthsDiff < 0) {
     return { needed: goal.target - goal.saved, months: 0, status: 'overdue' };

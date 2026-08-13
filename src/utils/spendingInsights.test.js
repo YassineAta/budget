@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   monthKey, categorize, groupByMonth, getMonthlySeries, getLearnedMonthlyBurn,
-  getWeightedMonthlyBurn,
+  getWeightedMonthlyBurn, getSeasonalBurn, getProjectedBurnForPeriod,
   getMonthOverMonth, getPaceSignal, getCategoryBreakdown, getAnomalies, getSpendingInsights,
 } from './spendingInsights';
 

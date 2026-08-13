@@ -91,11 +91,11 @@ describe('[S5] Catastrophic-state replay', () => {
     expect(state.monthly.spent).toBe(70);
   });
 
-  it('schemaVersion reaches CURRENT_SCHEMA_VERSION (6) after migration', () => {
+  it('schemaVersion reaches CURRENT_SCHEMA_VERSION (7) after migration', () => {
     localStorage.setItem('finplan_v6', JSON.stringify(buildDamagedState(3)));
     const { state, ok } = loadState();
     expect(ok).toBe(true);
-    expect(state.schemaVersion).toBe(6);
+    expect(state.schemaVersion).toBe(7);
   });
 
   it('no manual ADD_EXPENSE entries are touched (no isRecurring flag)', () => {

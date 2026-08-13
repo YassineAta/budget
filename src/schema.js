@@ -60,11 +60,18 @@ export const stateSchema = z.object({
   incomeEvents: z.array(incomeEventSchema).optional(),
   settings: z.object({
     currency: z.string()
-  }).passthrough()
+  }).passthrough(),
+  /** Prior-year monthly spend entries used to seed seasonal burn estimates. */
+  historicalSeasons: z.array(z.object({
+    month: z.string(),
+    total: z.number().min(0),
+  }).passthrough()).optional(),
+  /** Expected year-over-year growth in spending (inflation + income lift). Default 0.15 = 15%. */
+  historicalGrowthRate: z.number().min(0).max(2).optional(),
 }).passthrough();
 
 /** Increment this whenever a new migration is added. */
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 export function validateState(data) {
   return stateSchema.parse(data);

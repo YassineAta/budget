@@ -24,6 +24,8 @@ const defaultState = {
   ],
   incomeEvents: [],
   settings: { currency: 'TND' },
+  historicalSeasons: [],
+  historicalGrowthRate: 0.15,
 };
 
 // ─── Load / persist ───────────────────────────────────────────────────────────
@@ -393,6 +395,33 @@ export function loadState() {
         s.schemaVersion = 6;
       } catch (e) {
         console.error('[store] migration v5→v6 failed:', e);
+        throw e;
+      }
+    }
+
+    // ── v6→v7: seed prior-year school-season data + growth rate ──────────────
+    // Provides a Bayesian prior for the school-season burn estimate so the
+    // seasonal runway projection is accurate from day one of school year,
+    // before any real school-month data has been logged this year.
+    // growthRate = 0.15 models ~8% inflation + ~7% real income-lift effect.
+    if ((s.schemaVersion ?? 0) < 7) {
+      try {
+        if (!Array.isArray(s.historicalSeasons) || s.historicalSeasons.length === 0) {
+          s.historicalSeasons = [
+            { month: '2025-11', total: 138 },
+            { month: '2025-12', total: 126 },
+            { month: '2026-01', total: 86 },
+            { month: '2026-02', total: 234 },
+            { month: '2026-03', total: 114 },
+            { month: '2026-04', total: 325 },
+          ];
+        }
+        if (s.historicalGrowthRate === undefined) {
+          s.historicalGrowthRate = 0.15;
+        }
+        s.schemaVersion = 7;
+      } catch (e) {
+        console.error('[store] migration v6→v7 failed:', e);
         throw e;
       }
     }

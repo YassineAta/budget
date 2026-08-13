@@ -222,6 +222,169 @@ export function getAnomalies(expenses, opts = {}) {
   return anomalies.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }
 
+/** June (5), July (6), August (7) are summer; everything else is school year. */
+function isSummerMonth(monthIndex) {
+  return monthIndex >= 5 && monthIndex <= 7;
+}
+
+/**
+ * Historical per-season burn averages with Bayesian blending.
+ *
+ * Splits completed months into "summer" (Jun/Jul/Aug) and "school" (Sep–May)
+ * buckets. When prior-year `historicalSeasons` seed data is provided it acts as
+ * an informed prior, growth-adjusted by `growthRate` (inflation + income lift).
+ *
+ * Blend formula — empirical Bayes with prior strength 2:
+ *   estimate = (n × avg_current + 2 × adjusted_prior) / (n + 2)
+ *
+ * Behaviour at key values of n (current-year school months logged):
+ *   n=0 → 100% adjusted prior  (pure historical, before school starts)
+ *   n=2 → 50 / 50 blend
+ *   n=6 → 75% current actuals  (prior almost fully displaced)
+ *
+ * Returns { summer, school } — null when no data of any kind exists for that
+ * season (e.g. no summer history and no summer seed data).
+ */
+export function getSeasonalBurn(expenses, opts = {}) {
+  const { asOf = new Date(), historicalSeasons = [], growthRate = 0 } = opts;
+  const currentKey = new Date(asOf).toISOString().slice(0, 7);
+  const groups = groupByMonth(expenses);
+
+  const summerCurrent = [], summerHistorical = [];
+  const schoolCurrent = [], schoolHistorical = [];
+
+  // Live ledger: completed months only (current partial month excluded).
+  for (const [key, grp] of Object.entries(groups)) {
+    if (key >= currentKey || grp.count === 0) continue;
+    const monthIndex = parseInt(key.slice(5, 7), 10) - 1;
+    if (isSummerMonth(monthIndex)) summerCurrent.push(grp.total);
+    else schoolCurrent.push(grp.total);
+  }
+
+  // Prior-year seed entries (raw totals; growth adjustment applied below).
+  for (const entry of historicalSeasons) {
+    if (!entry?.month || entry.month >= currentKey) continue;
+    const monthIndex = parseInt(entry.month.slice(5, 7), 10) - 1;
+    if (isSummerMonth(monthIndex)) summerHistorical.push(entry.total);
+    else schoolHistorical.push(entry.total);
+  }
+
+  // Bayesian blend: prior counts as PRIOR_STRENGTH pseudo-observations so that
+  // the posterior shifts smoothly toward current actuals as data accumulates.
+  const PRIOR_STRENGTH = 2;
+
+  function blend(current, historical) {
+    const histAdj = historical.map(v => v * (1 + growthRate));
+    const histAvg = histAdj.length > 0
+      ? histAdj.reduce((s, x) => s + x, 0) / histAdj.length
+      : null;
+
+    if (histAvg === null && current.length === 0) return null;
+    if (histAvg === null) return round2(current.reduce((s, x) => s + x, 0) / current.length);
+    if (current.length === 0) return round2(histAvg);
+
+    const n = current.length;
+    const currentAvg = current.reduce((s, x) => s + x, 0) / n;
+    return round2((n * currentAvg + PRIOR_STRENGTH * histAvg) / (n + PRIOR_STRENGTH));
+  }
+
+  return {
+    summer: blend(summerCurrent, summerHistorical),
+    school: blend(schoolCurrent, schoolHistorical),
+  };
+}
+
+/**
+ * Forward-projected total burn for the next `months` calendar months (starting
+ * from the month AFTER `asOf`). Each upcoming month's predicted spend uses:
+ *   1. Seasonal avg for that season (summer or school) — when ≥2 historical
+ *      months of that season exist in the ledger.
+ *   2. Recency-weighted avg — fallback when no seasonal data yet.
+ *   3. `fallback` value — when there is no completed-month history at all.
+ *
+ * Summing month-by-month (not flat_rate × months) means a season flip in the
+ * upcoming window is reflected immediately: if the next 3 months are school
+ * months, the target uses school-year spending even if the user is currently
+ * in a high-spend summer — and vice versa.
+ */
+export function getProjectedBurnForPeriod(expenses, months, opts = {}) {
+  const { asOf = new Date(), fallback = 0, historicalSeasons = [], growthRate = 0 } = opts;
+  const seasonal = getSeasonalBurn(expenses, { asOf, historicalSeasons, growthRate });
+  const recency = getWeightedMonthlyBurn(expenses, { asOf });
+
+  const ref = new Date(asOf);
+  let total = 0;
+
+  for (let i = 1; i <= months; i++) {
+    let m = ref.getUTCMonth() + i;
+    let y = ref.getUTCFullYear();
+    while (m > 11) { m -= 12; y += 1; }
+
+    const seasonAvg = isSummerMonth(m) ? seasonal.summer : seasonal.school;
+    total += seasonAvg ?? recency ?? fallback;
+  }
+
+  return round2(total);
+}
+
+/**
+ * Month-by-month seasonal runway simulation.
+ *
+ * Projects how long `bufferAmount` lasts by consuming each upcoming calendar
+ * month at its predicted burn rate:
+ *   seasonal avg (summer or school-year) › recency-weighted avg › declaredMonthly
+ *
+ * Unlike simulateRunout + burnOverride this is a PURE monthly-rate simulation —
+ * no recurring events scheduled separately — so there is no double-counting.
+ * The partial remaining days of the current month are prorated.
+ *
+ * Returns the projected depletion Date, or null when the buffer survives the
+ * full maxMonths look-ahead.
+ */
+export function getSeasonalRunoutDate(bufferAmount, expenses, declaredMonthly, opts = {}) {
+  const { asOf = new Date(), maxMonths = 24, historicalSeasons = [], growthRate = 0 } = opts;
+  if (!bufferAmount || bufferAmount <= 0) return new Date(asOf);
+
+  const seasonal = getSeasonalBurn(expenses, { asOf, historicalSeasons, growthRate });
+  const recency  = getWeightedMonthlyBurn(expenses, { asOf });
+
+  let remaining = bufferAmount;
+  const ref = new Date(asOf);
+
+  // Prorate the remainder of the current (partial) month.
+  const daysInCur   = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() + 1, 0)).getUTCDate();
+  const dayOfMonth  = ref.getUTCDate();
+  const curFraction = (daysInCur - dayOfMonth) / daysInCur;
+  const curSeasonAvg = isSummerMonth(ref.getUTCMonth()) ? seasonal.summer : seasonal.school;
+  const curBurn     = curSeasonAvg ?? recency ?? declaredMonthly;
+  const partialBurn = curBurn * curFraction;
+
+  if (remaining <= partialBurn) {
+    const daysLeft = Math.ceil((remaining / curBurn) * daysInCur);
+    return new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), dayOfMonth + daysLeft));
+  }
+  remaining -= partialBurn;
+
+  // Full future months: each month gets its own seasonal rate.
+  for (let i = 1; i <= maxMonths; i++) {
+    let m = ref.getUTCMonth() + i;
+    let y = ref.getUTCFullYear();
+    while (m > 11) { m -= 12; y += 1; }
+
+    const seasonAvg = isSummerMonth(m) ? seasonal.summer : seasonal.school;
+    const monthBurn = seasonAvg ?? recency ?? declaredMonthly;
+    const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+
+    if (remaining <= monthBurn) {
+      const dayOfRunout = Math.min(Math.ceil((remaining / monthBurn) * daysInMonth), daysInMonth);
+      return new Date(Date.UTC(y, m, dayOfRunout));
+    }
+    remaining -= monthBurn;
+  }
+
+  return null;
+}
+
 /** One-shot bundle for the UI. */
 export function getSpendingInsights(state, asOf = new Date(), months = 6) {
   const expenses = state?.monthly?.expenses || [];
