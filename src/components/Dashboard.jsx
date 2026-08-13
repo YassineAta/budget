@@ -4,7 +4,7 @@ import ProgressBar from './ProgressBar';
 import GoalCard from './GoalCard';
 import { getRecommendation } from '../utils/financeAI';
 import { projectBalance, normalizeToMonthly } from '../utils/cashflow';
-import { getSpendingInsights, getSeasonalRunoutDate } from '../utils/spendingInsights';
+import { getSeasonalRunoutDate } from '../utils/spendingInsights';
 import {
     IconShield, IconShieldAlert, IconCheckCircle, IconAlertTriangle, IconAlertOctagon,
     IconCalendar, IconBrain, IconSparkles, IconArrowRight, IconCart, IconChart,
@@ -91,16 +91,6 @@ export default function Dashboard({ onTabChange }) {
     const readyGoals = goals.filter(g => !g.isBuffer && g.type !== 'wishlist' && g.saved >= g.target);
 
     const balanceColor = available < 50 ? 'text-red' : available < 150 ? 'text-yellow' : 'text-green';
-
-    const insights = getSpendingInsights(state);
-    // weightedBurn already includes recurring spend — divide directly to avoid double-counting.
-    const weightedBurn = insights.weightedBurn;
-    const actualRunoutDays = weightedBurn != null && weightedBurn > 0 && available > 0
-        ? Math.ceil(available / weightedBurn * 30.4375)
-        : null;
-    const actualRunout = actualRunoutDays != null
-        ? new Date(Date.now() + actualRunoutDays * DAY_MS)
-        : null;
 
     return (
         <div>
@@ -247,18 +237,6 @@ export default function Dashboard({ onTabChange }) {
                         <div className="value text-blue">{Math.round(essentials)} {cur}</div>
                     </div>
                 </div>
-                {weightedBurn != null && (
-                    <div className="alert alert-info mt-3">
-                        <IconBrain />
-                        <span>
-                            Your recency-weighted spend is <strong>{Math.round(weightedBurn).toLocaleString()} {cur}/mo</strong>.
-                            {actualRunoutDays != null
-                                ? <> At that pace your buffer lasts <strong>~{actualRunoutDays}d</strong>
-                                    {' '}({actualRunout.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}).</>
-                                : <> Your buffer comfortably lasts over 2 years at this pace.</>}
-                        </span>
-                    </div>
-                )}
             </section>
 
             {/* Net Goal Progress */}
