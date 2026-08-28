@@ -4,7 +4,7 @@ import ProgressBar from './ProgressBar';
 import GoalCard from './GoalCard';
 import { getRecommendation } from '../utils/financeAI';
 import { projectBalance, normalizeToMonthly } from '../utils/cashflow';
-import { getSeasonalRunoutDate } from '../utils/spendingInsights';
+import { getSeasonalRunoutDate, getSeasonalBurn, getWeightedMonthlyBurn } from '../utils/spendingInsights';
 import {
     IconShield, IconShieldAlert, IconCheckCircle, IconAlertTriangle, IconAlertOctagon,
     IconCalendar, IconBrain, IconSparkles, IconArrowRight, IconCart, IconChart,
@@ -34,14 +34,34 @@ function RunoutBadge({ state, cur }) {
     });
     const now = new Date();
 
+    // The burn rates the forecast actually uses — surfaced so the date is
+    // auditable (buffer ÷ the season's rate ≈ months of runway).
+    const seasonal = getSeasonalBurn(expenses, { historicalSeasons, growthRate });
+    const recency = getWeightedMonthlyBurn(expenses);
+    const isSummerNow = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 7;
+    const schoolRate = Math.round(seasonal.school ?? recency ?? declared);
+    const summerRate = Math.round(seasonal.summer ?? recency ?? declared);
+
+    const calcLine = (
+        <div className="runout-calc text-dim mono" style={{ fontSize: 'var(--text-2xs)', marginTop: 2 }}>
+            {Math.round(buffer.saved).toLocaleString()} {cur} ·{' '}
+            <span style={{ fontWeight: !isSummerNow ? 700 : 400 }}>school {schoolRate.toLocaleString()}/mo</span> ·{' '}
+            <span style={{ fontWeight: isSummerNow ? 700 : 400 }}>summer {summerRate.toLocaleString()}/mo</span>
+            {' · '}{isSummerNow ? 'summer' : 'school'} now
+        </div>
+    );
+
     if (!runout) {
         const p12 = projectBalance(state, 365);
         return (
-            <div className="runout text-green">
-                <IconCheckCircle />
-                <span>Runway &gt; 1 year</span>
-                <span className="flex-auto runout-hint">12mo: <strong>{p12.toLocaleString()} {cur}</strong></span>
-            </div>
+            <>
+                <div className="runout text-green">
+                    <IconCheckCircle />
+                    <span>Runway &gt; 1 year</span>
+                    <span className="flex-auto runout-hint">12mo: <strong>{p12.toLocaleString()} {cur}</strong></span>
+                </div>
+                {calcLine}
+            </>
         );
     }
 
@@ -51,11 +71,14 @@ function RunoutBadge({ state, cur }) {
     const Icon = daysLeft < 30 ? IconAlertOctagon : daysLeft < 90 ? IconAlertTriangle : IconCalendar;
 
     return (
-        <div className={`runout ${tone}`}>
-            <Icon />
-            <span>Runs out in ~{daysLeft}d · <strong>{dateStr}</strong></span>
-            <span className="flex-auto runout-hint">seasonal forecast</span>
-        </div>
+        <>
+            <div className={`runout ${tone}`}>
+                <Icon />
+                <span>Runs out in ~{daysLeft}d · <strong>{dateStr}</strong></span>
+                <span className="flex-auto runout-hint">seasonal forecast</span>
+            </div>
+            {calcLine}
+        </>
     );
 }
 
