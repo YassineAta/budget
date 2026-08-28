@@ -38,7 +38,7 @@ function RunoutBadge({ state, cur }) {
     // auditable (buffer ÷ the season's rate ≈ months of runway).
     const seasonal = getSeasonalBurn(expenses, { historicalSeasons, growthRate });
     const recency = getWeightedMonthlyBurn(expenses);
-    const isSummerNow = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 7;
+    const isSummerNow = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 8;
     const schoolRate = Math.round(seasonal.school ?? recency ?? declared);
     const summerRate = Math.round(seasonal.summer ?? recency ?? declared);
 

@@ -222,15 +222,16 @@ export function getAnomalies(expenses, opts = {}) {
   return anomalies.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }
 
-/** June (5), July (6), August (7) are summer; everything else is school year. */
+/** June (5), July (6), August (7), September (8) are summer; the rest is school
+ *  year. September is included because spending stays in summer mode into Sep. */
 function isSummerMonth(monthIndex) {
-  return monthIndex >= 5 && monthIndex <= 7;
+  return monthIndex >= 5 && monthIndex <= 8;
 }
 
 /**
  * Historical per-season burn averages with Bayesian blending.
  *
- * Splits completed months into "summer" (Jun/Jul/Aug) and "school" (Sep–May)
+ * Splits completed months into "summer" (Jun–Sep) and "school" (Oct–May)
  * buckets. When prior-year `historicalSeasons` seed data is provided it acts as
  * an informed prior, growth-adjusted by `growthRate` (inflation + income lift).
  *
