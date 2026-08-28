@@ -69,7 +69,11 @@ export default function GoalsList() {
     const wishlistGoals = useMemo(() => goals.filter(g => g.type === 'wishlist'), [goals]);
     const goalsWithSaved = useMemo(() => goals.filter(g => g.saved > 0), [goals]);
 
-    const totalAllocated = useMemo(() => goals.reduce((s, g) => s + g.saved, 0), [goals]);
+    // Wishlist goals hold no reserved money — exclude from the allocated total.
+    const totalAllocated = useMemo(
+        () => goals.filter(g => g.type !== 'wishlist').reduce((s, g) => s + g.saved, 0),
+        [goals],
+    );
 
     function handleAddSaving(e) {
         e.preventDefault();
@@ -214,7 +218,7 @@ export default function GoalsList() {
                                 <option value="Luxury">Luxury</option>
                             </select>
                             <input
-                                type="month"
+                                type="date"
                                 value={targetDate}
                                 onChange={e => setTargetDate(e.target.value)}
                                 aria-label="Target date"

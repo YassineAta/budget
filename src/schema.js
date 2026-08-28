@@ -33,14 +33,27 @@ export const expenseSchema = z.object({
   id: z.string(),
   name: z.string(),
   amount: z.number().min(0),
-  date: z.string()
+  date: z.string(),
+  /**
+   * Actual balance deductions this ledger entry caused, so DELETE_EXPENSE can
+   * refund EXACTLY what ADD_EXPENSE / applyDueExpenses removed (conservation
+   * invariant #2 — no mint-on-delete). Absent on legacy entries, which are
+   * treated as fully buffer-funded for backward compatibility.
+   */
+  paidFromCash: z.number().min(0).optional(),
+  paidFromBuffer: z.number().min(0).optional(),
 }).passthrough();
 
 export const incomeEventSchema = z.object({
   id: z.string(),
   source: z.string(),
   amount: z.number().min(0),
-  date: z.string()
+  date: z.string(),
+  /** goalId → amount routed to that goal by the allocation engine (derived, but
+   *  persisted so a delete can attempt a conservative reversal). */
+  allocations: z.record(z.string(), z.number()).optional(),
+  /** portion of this income that stayed as free cash. */
+  cashAllocated: z.number().min(0).optional(),
 }).passthrough();
 
 export const stateSchema = z.object({

@@ -68,8 +68,11 @@ export default function Dashboard({ onTabChange }) {
 
     const bufferGoal = goals.find(g => g.isBuffer);
     const recurringExpenses = state.recurringExpenses || [];
-    const totalAllocated = goals.reduce((s, g) => s + g.saved, 0);
-    const totalTargets = goals.reduce((s, g) => s + g.target, 0);
+    // Wishlist goals hold no reserved money, so they are excluded from allocated
+    // and target totals (invariant: "no balance effect").
+    const fundedGoals = goals.filter(g => g.type !== 'wishlist');
+    const totalAllocated = fundedGoals.reduce((s, g) => s + g.saved, 0);
+    const totalTargets = fundedGoals.reduce((s, g) => s + g.target, 0);
     const essentials = monthlyEssentials(state);
 
     const available = bufferGoal ? bufferGoal.saved : 0;
@@ -77,8 +80,17 @@ export default function Dashboard({ onTabChange }) {
     const remainingBudget = Math.min(available, Math.max(0, essentials - spentThisMonth));
 
     const months = safetyMonths || 3;
-    const bufferTarget = months * essentials;
+    // Single source of truth for the buffer target: the value the store already
+    // computed onto the buffer goal (seasonal-aware). Do NOT recompute a rival
+    // months×essentials figure here — that produced two disagreeing targets (#5).
+    const bufferTarget = bufferGoal ? bufferGoal.target : months * essentials;
     const fundedMonths = essentials > 0 ? (available / essentials).toFixed(1) : '—';
+
+    // Money genuinely put aside toward goals = everything saved outside the
+    // safety buffer (which is survival money, not goal progress).
+    const goalSavings = goals
+        .filter(g => !g.isBuffer && g.type !== 'wishlist')
+        .reduce((s, g) => s + g.saved, 0);
 
     const monthlyRecurring = recurringExpenses
         .filter(e => e.active)
@@ -244,9 +256,9 @@ export default function Dashboard({ onTabChange }) {
                 <section className="card subtle mt-5">
                     <div className="card-title"><IconRocket /> Net Goal Progress</div>
                     <div className="flex-between mb-2">
-                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Total put aside</span>
+                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Saved toward goals</span>
                         <strong className="text-blue mono">
-                            {Math.max(0, totalAllocated - Math.min(bufferGoal?.saved || 0, Math.max(0, months - 1) * essentials)).toLocaleString()} {cur}
+                            {goalSavings.toLocaleString()} {cur}
                         </strong>
                     </div>
                     <ProgressBar

@@ -26,9 +26,11 @@ describe('calculateProgress', () => {
         expect(result.barColor).toBe('green');
     });
 
-    it('handles over-funding correctly', () => {
+    it('caps displayed progress at 100% when over-funded', () => {
+        // The saved amount is preserved elsewhere; the *displayed* percentage must
+        // never exceed 100% (no mathematically impossible state).
         const result = calculateProgress(150, 100);
-        expect(result.pct).toBe(150);
+        expect(result.pct).toBe(100);
         expect(result.remaining).toBe(0);
         expect(result.isFunded).toBe(true);
         expect(result.barColor).toBe('green');

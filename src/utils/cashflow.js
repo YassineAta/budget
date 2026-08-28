@@ -109,7 +109,13 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
   // (with their real date) but don't inflate the current-month counter.
   const resetDate = state.monthly?.resetDate || new Date(asOf).toISOString().slice(0, 7);
 
-  let totalDrain = 0;
+  const buffer = (state.goals || []).find(g => g.isBuffer);
+  // Running balances so each cut can draw cash-first, then buffer — matching the
+  // manual ADD_EXPENSE model and keeping money conserved. Each ledger entry
+  // records its own paid split so a later DELETE_EXPENSE refunds exactly what
+  // this cut removed (conservation invariant #2 — no mint-on-delete).
+  let runningCash = state.cash || 0;
+  let runningBuffer = buffer ? (buffer.saved || 0) : 0;
   let thisMonthDrain = 0;
   let hasChanges = false;
   const newLedgerEntries = [];
@@ -120,21 +126,28 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
     hasChanges = true;
 
     for (const cut of cuts) {
-      totalDrain = r2(totalDrain + exp.amount);
-      // Build a spending-log entry with the real cut date
+      const amount = exp.amount;
+      const paidFromCash = r2(Math.min(runningCash, amount));
+      const paidFromBuffer = r2(Math.min(Math.max(0, runningBuffer), amount - paidFromCash));
+      runningCash = r2(Math.max(0, runningCash - paidFromCash));
+      runningBuffer = r2(Math.max(0, runningBuffer - paidFromBuffer));
+
+      // Build a spending-log entry with the real cut date + actual paid split
       const cutIso = cut.toISOString();
       const cutMonth = cutIso.slice(0, 7);
       newLedgerEntries.push({
         id: uid(),
         name: exp.name,
-        amount: exp.amount,
+        amount,
         date: cutIso,
         isRecurring: true,
         recurringId: exp.id,
+        paidFromCash,
+        paidFromBuffer,
       });
       // Only count toward this month's budget if the cut is in the current period
       if (cutMonth >= resetDate) {
-        thisMonthDrain = r2(thisMonthDrain + exp.amount);
+        thisMonthDrain = r2(thisMonthDrain + amount);
       }
     }
 
@@ -147,9 +160,7 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
   if (!hasChanges) return state;
 
   const updatedGoals = state.goals.map(g =>
-    g.isBuffer
-      ? { ...g, saved: r2(Math.max(0, g.saved - totalDrain)) }
-      : g
+    g.isBuffer ? { ...g, saved: runningBuffer } : g
   );
 
   // Append new entries to the monthly log and update spent counter
@@ -164,6 +175,7 @@ export function applyDueExpenses(state, asOf = new Date().toISOString()) {
 
   return {
     ...state,
+    cash: runningCash,
     goals: updatedGoals,
     recurringExpenses: updatedExpenses,
     monthly: updatedMonthly,

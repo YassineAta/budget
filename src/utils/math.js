@@ -1,6 +1,8 @@
 export function calculateProgress(saved, target) {
     const remaining = Math.max(0, target - saved);
-    const pct = target > 0 ? Math.round((saved / target) * 100) : 0;
+    // Cap at 100%: an over-funded goal (e.g. target lowered below saved) must
+    // never display a mathematically impossible >100% progress.
+    const pct = target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0;
     const isFunded = remaining <= 0;
     
     let barColor = 'red';

@@ -3,6 +3,13 @@ import { uid, calculateBufferTarget } from '../utils/storeUtils';
 import { applyDueExpenses } from '../utils/cashflow';
 import { computeAllocation } from '../utils/allocator';
 
+/** Round to 2 decimals (currency minor units). */
+const r2 = n => Math.round(n * 100) / 100;
+/** Coerce to a finite, non-negative number (NaN/±Infinity/negatives → 0).
+ *  The authoritative validation guard at the reducer edge: no non-finite or
+ *  negative money value is ever allowed into state (invariant #6). */
+const nn = v => (Number.isFinite(v) ? Math.max(0, v) : 0);
+
 export function rootReducer(state, action) {
   let next;
   const thisMonth = new Date().toISOString().slice(0, 7);
@@ -11,7 +18,7 @@ export function rootReducer(state, action) {
 
   switch (action.type) {
     case 'SET_CASH':
-      next = { ...base, cash: Math.max(0, action.value) };
+      next = { ...base, cash: nn(action.value) };
       break;
 
     case 'ADD_GOAL': {
@@ -19,9 +26,12 @@ export function rootReducer(state, action) {
       next = {
         ...base,
         goals: [...base.goals, {
-          id: uid(), saved: 0, isBuffer: false,
+          id: uid(), isBuffer: false,
           type: 'saving',
           ...action.goal,
+          // Money fields are validated at the edge — never trust raw form input.
+          target: nn(action.goal.target),
+          saved: nn(action.goal.saved),
           name,
           // Legacy fields: harmless but no longer used by engine
           isRecurring: false, monthlyCost: 0, activeThisMonth: true,
@@ -33,6 +43,16 @@ export function rootReducer(state, action) {
     case 'EDIT_GOAL': {
       const updates = { ...action.updates };
       if (updates.name) updates.name = DOMPurify.sanitize(updates.name);
+      // Reject a non-finite target (e.g. parseFloat('') → NaN) rather than let it
+      // poison state and fail schema validation on the next reload (invariant #6).
+      if ('target' in updates) {
+        if (Number.isFinite(updates.target)) updates.target = Math.max(0, updates.target);
+        else delete updates.target;
+      }
+      if ('saved' in updates) {
+        if (Number.isFinite(updates.saved)) updates.saved = Math.max(0, updates.saved);
+        else delete updates.saved;
+      }
       next = {
         ...base,
         goals: base.goals.map(g => g.id === action.id ? { ...g, ...updates } : g)
@@ -50,13 +70,16 @@ export function rootReducer(state, action) {
 
     case 'FUND_GOAL': {
       const goal = base.goals.find(g => g.id === action.id);
-      if (!goal) return base;
+      // Wishlist goals are tracking-only ("no balance effect") — never reserve
+      // real money into them (invariant: wishlist holds no cash).
+      if (!goal || goal.type === 'wishlist') return base;
       const remaining = Math.max(0, goal.target - goal.saved);
-      const amt = Math.min(action.amount, base.cash, remaining);
+      const amt = r2(Math.min(nn(action.amount), base.cash, remaining));
+      if (amt <= 0) return base;
       next = {
         ...base,
-        cash: base.cash - amt,
-        goals: base.goals.map(g => g.id === action.id ? { ...g, saved: g.saved + amt } : g),
+        cash: r2(base.cash - amt),
+        goals: base.goals.map(g => g.id === action.id ? { ...g, saved: r2(g.saved + amt) } : g),
       };
       break;
     }
@@ -64,11 +87,12 @@ export function rootReducer(state, action) {
     case 'WITHDRAW_GOAL': {
       const goal = base.goals.find(g => g.id === action.id);
       if (!goal) return base;
-      const amt = Math.min(action.amount, goal.saved);
+      const amt = r2(Math.min(nn(action.amount), goal.saved));
+      if (amt <= 0) return base;
       next = {
         ...base,
-        cash: base.cash + amt,
-        goals: base.goals.map(g => g.id === action.id ? { ...g, saved: g.saved - amt } : g),
+        cash: r2(base.cash + amt),
+        goals: base.goals.map(g => g.id === action.id ? { ...g, saved: r2(g.saved - amt) } : g),
       };
       break;
     }
@@ -76,10 +100,12 @@ export function rootReducer(state, action) {
     case 'MOVE_FUNDS': {
       const from = base.goals.find(g => g.id === action.fromId);
       const to = base.goals.find(g => g.id === action.toId);
-      if (!from || !to) return base;
-      const amt = to.isBuffer
-        ? Math.min(action.amount, from.saved)
-        : Math.min(action.amount, from.saved, to.target - to.saved);
+      // Cannot move money INTO a wishlist (tracking-only, holds no cash).
+      if (!from || !to || to.type === 'wishlist') return base;
+      const amt = r2(to.isBuffer
+        ? Math.min(nn(action.amount), from.saved)
+        : Math.min(nn(action.amount), from.saved, to.target - to.saved));
+      if (amt <= 0) return base;
       next = {
         ...base,
         goals: base.goals.map(g => {
@@ -91,9 +117,30 @@ export function rootReducer(state, action) {
       break;
     }
 
-    case 'PURCHASE_ITEM':
-      next = { ...base, goals: base.goals.filter(g => g.id !== action.id) };
+    case 'PURCHASE_ITEM': {
+      const goal = base.goals.find(g => g.id === action.id);
+      if (!goal) return base;
+      // Double-entry: the goal's saved money leaves the system as a real expense.
+      // Log it so the ledger records where the money went (invariant #1). The
+      // paid split is 0/0 because the money came from the goal itself (removed by
+      // dropping the goal), so deleting this record must refund nothing.
+      const spentAmt = r2(nn(goal.saved));
+      const date = new Date().toISOString();
+      const inCurrentMonth = date.slice(0, 7) === thisMonth;
+      const entry = spentAmt > 0
+        ? [{ id: uid(), name: `Purchased: ${goal.name}`, amount: spentAmt, date, paidFromCash: 0, paidFromBuffer: 0, isPurchase: true }]
+        : [];
+      next = {
+        ...base,
+        goals: base.goals.filter(g => g.id !== action.id),
+        monthly: {
+          ...base.monthly,
+          spent: inCurrentMonth ? r2((base.monthly.spent || 0) + spentAmt) : base.monthly.spent,
+          expenses: [...base.monthly.expenses, ...entry],
+        },
+      };
       break;
+    }
 
     case 'ADD_INCOME': {
       const source = action.source ? DOMPurify.sanitize(action.source) : 'Unknown Source';
@@ -114,15 +161,21 @@ export function rootReducer(state, action) {
       let nextGoals = base.goals.map(g => ({ ...g }));
 
       if (inc.allocations) {
+        // Historical-record semantics: an income event is a receipt, not a live
+        // reversible ledger. Only claw back an allocation when the money is
+        // demonstrably still present (goal exists AND still holds ≥ the allocated
+        // amount). If it was since spent / moved / withdrawn, leave balances
+        // untouched — never destroy money that isn't there, never go negative,
+        // never orphan against a deleted goal (root cause of critical bug #2).
         for (const [goalId, amt] of Object.entries(inc.allocations)) {
           const goal = nextGoals.find(g => g.id === goalId);
-          if (goal) goal.saved = Math.max(0, goal.saved - amt);
+          if (goal && goal.saved >= amt) goal.saved = r2(goal.saved - amt);
         }
-        const allocatedToGoals = Object.values(inc.allocations).reduce((s, v) => s + v, 0);
-        const cashPortion = inc.cashAllocated ?? Math.max(0, inc.amount - allocatedToGoals);
-        nextCash = Math.max(0, nextCash - cashPortion);
+        const cashPortion = inc.cashAllocated ?? 0;
+        if (nextCash >= cashPortion) nextCash = r2(nextCash - cashPortion);
       } else {
-        nextCash = Math.max(0, nextCash - inc.amount);
+        // Legacy quick-add (cash only): reverse only up to what remains.
+        nextCash = r2(Math.max(0, nextCash - inc.amount));
       }
 
       next = {
@@ -162,26 +215,38 @@ export function rootReducer(state, action) {
       break;
 
     case 'SET_MONTHLY_BUDGET':
-      next = { ...base, monthly: { ...(base.monthly || {}), budget: action.value } };
+      next = { ...base, monthly: { ...(base.monthly || {}), budget: nn(action.value) } };
       break;
 
     case 'SET_SAFETY_MONTHS':
-      next = { ...base, safetyMonths: Math.max(1, action.value) };
+      next = { ...base, safetyMonths: Math.max(1, Number.isFinite(action.value) ? action.value : 1) };
       break;
 
     case 'ADD_EXPENSE': {
+      const amount = r2(nn(action.amount));
+      if (amount <= 0) return base;
       const name = action.name ? DOMPurify.sanitize(action.name) : 'Unknown Expense';
       const date = action.date || new Date().toISOString();
-      const exp = { id: uid(), name, amount: action.amount, date };
-      const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: Math.max(0, g.saved - action.amount) } : g);
+
+      // Cash-first, then buffer. Free cash is consumed before dipping into the
+      // safety buffer (chosen expense model). Record the ACTUAL split on the
+      // ledger entry so DELETE_EXPENSE refunds exactly what was removed —
+      // closing the mint-on-delete hole (critical bugs #1 & #3).
+      const paidFromCash = r2(Math.min(base.cash, amount));
+      const buf = base.goals.find(g => g.isBuffer);
+      const paidFromBuffer = buf ? r2(Math.min(Math.max(0, buf.saved), amount - paidFromCash)) : 0;
+
+      const exp = { id: uid(), name, amount, date, paidFromCash, paidFromBuffer };
+      const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: r2(Math.max(0, g.saved - paidFromBuffer)) } : g);
       const inCurrentMonth = typeof date === 'string' && date.slice(0, 7) === thisMonth;
       next = {
         ...base,
+        cash: r2(Math.max(0, base.cash - paidFromCash)),
         goals,
-        monthly: { 
-          ...base.monthly, 
-          spent: inCurrentMonth ? base.monthly.spent + action.amount : base.monthly.spent, 
-          expenses: [...base.monthly.expenses, exp] 
+        monthly: {
+          ...base.monthly,
+          spent: inCurrentMonth ? r2(base.monthly.spent + amount) : base.monthly.spent,
+          expenses: [...base.monthly.expenses, exp],
         },
       };
       break;
@@ -190,16 +255,23 @@ export function rootReducer(state, action) {
     case 'DELETE_EXPENSE': {
       const exp = base.monthly.expenses.find(e => e.id === action.id);
       if (!exp) return base;
-      const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: g.saved + exp.amount } : g);
+      // Refund EXACTLY what was deducted, using the recorded split. Legacy entries
+      // (created before the split was tracked) are treated as fully buffer-funded,
+      // preserving their original semantics.
+      const hasSplit = exp.paidFromCash !== undefined || exp.paidFromBuffer !== undefined;
+      const refundCash = hasSplit ? nn(exp.paidFromCash) : 0;
+      const refundBuffer = hasSplit ? nn(exp.paidFromBuffer) : nn(exp.amount);
+      const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: r2(g.saved + refundBuffer) } : g);
       // The spent counter only tracks the current month — deleting a historical
       // ledger entry must not distort it.
       const inCurrentMonth = typeof exp.date === 'string' && exp.date.slice(0, 7) === thisMonth;
       next = {
         ...base,
+        cash: r2(base.cash + refundCash),
         goals,
         monthly: {
           ...base.monthly,
-          spent: inCurrentMonth ? base.monthly.spent - exp.amount : base.monthly.spent,
+          spent: inCurrentMonth ? r2(base.monthly.spent - nn(exp.amount)) : base.monthly.spent,
           expenses: base.monthly.expenses.filter(e => e.id !== action.id),
         },
       };

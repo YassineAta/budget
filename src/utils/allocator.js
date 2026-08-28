@@ -184,13 +184,9 @@ function distributeGoals({ state, saved, bufferFull, give }, wallet) {
     .filter(g => (g.priority === 'Medium' || !g.priority) && saved[g.id] < g.target)
     .forEach(g => give(wallet, g.id, g.target - saved[g.id], g.name, '🎯', 'medium-priority'));
 
-  // Wishlist — only when the buffer is fully funded.
-  if (bufferFull) {
-    (state.goals || [])
-      .filter(g => g.type === 'wishlist' && saved[g.id] < g.target)
-      .sort((a, b) => (P_ORDER[a.priority] ?? 1) - (P_ORDER[b.priority] ?? 1))
-      .forEach(g => give(wallet, g.id, g.target - saved[g.id], g.name, '💭', 'wishlist'));
-  }
+  // Wishlist goals are tracking-only ("no balance effect") and never receive
+  // reserved cash from the allocation engine — money stays as free cash instead
+  // so the label is truthful. (Was: funded when the buffer was full.)
 
   // Low priority non-deadline goals.
   noDeadlineGoals

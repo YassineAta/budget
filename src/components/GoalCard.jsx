@@ -1,5 +1,5 @@
 import { useState, useMemo, memo } from 'react';
-import { useStore, getMonthlySaving, formatTargetDate } from '../store';
+import { useStore, getMonthlySaving, formatTargetDate, toDateInputValue } from '../store';
 import ProgressBar from './ProgressBar';
 import { calculateProgress } from '../utils/math';
 import {
@@ -33,7 +33,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
     const [editTarget, setEditTarget] = useState(goal.target);
     const [editPriority, setEditPriority] = useState(goal.priority);
     const [editCategory, setEditCategory] = useState(goal.category);
-    const [editDate, setEditDate] = useState(goal.targetDate || '');
+    const [editDate, setEditDate] = useState(toDateInputValue(goal.targetDate));
     const [editType, setEditType] = useState(goal.type || 'saving');
 
     const { remaining, pct, isFunded, plan, barColor, pctColor } = useMemo(() => {
@@ -65,12 +65,16 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
 
     function handleEdit(e) {
         e.preventDefault();
+        const parsedTarget = parseFloat(editTarget);
+        // Guard against NaN/negative (empty field) reaching the store, where it
+        // would fail schema validation on the next reload.
+        if (!Number.isFinite(parsedTarget) || parsedTarget < 0) return;
         dispatch({
             type: 'EDIT_GOAL',
             id: goal.id,
             updates: {
                 name: editName,
-                target: parseFloat(editTarget),
+                target: parsedTarget,
                 priority: editPriority,
                 category: editCategory,
                 targetDate: editDate,
@@ -175,19 +179,23 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                             {plan.status === 'overdue' ? <IconAlertOctagon /> : plan.status === 'due-now' ? <IconClock /> : <IconCalendar />}
                             <span style={{ flex: 1 }}>
                                 {plan.status === 'overdue'
-                                    ? 'Behind schedule'
+                                    ? `Behind — ${plan.needed.toLocaleString()} ${cur} to finish`
                                     : plan.status === 'due-now'
-                                        ? 'Due this month'
+                                        ? `Due now — ${plan.needed.toLocaleString()} ${cur} to finish`
                                         : `Save ${plan.needed.toLocaleString()} ${cur}/month`}
                             </span>
                             <span className="mono text-dim" style={{ fontSize: 'var(--text-2xs)' }}>
-                                ({plan.needed.toLocaleString()} {cur} needed)
+                                {plan.days < 0
+                                    ? `${Math.abs(plan.days)}d overdue`
+                                    : plan.days === 0
+                                        ? 'due today'
+                                        : `in ${plan.days}d`}
                             </span>
                         </div>
                     )}
 
                     <div className="goal-actions">
-                        {!isFunded && (
+                        {!isFunded && goal.type !== 'wishlist' && (
                             <button className="btn btn-sm btn-primary" onClick={() => setMode('fund')}>
                                 <IconPlus /> Fund
                             </button>
@@ -244,7 +252,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                             <option value="Education">Education</option>
                             <option value="Luxury">Luxury</option>
                         </select>
-                        <input type="month" aria-label="Target date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                        <input type="date" aria-label="Target date" value={editDate} onChange={e => setEditDate(e.target.value)} />
                     </div>
                     {!goal.isBuffer && (
                         <div className="input-row">

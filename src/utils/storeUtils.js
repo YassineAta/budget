@@ -35,39 +35,105 @@ export function calculateBufferTarget(state) {
  * Used for buffer level calculations and income allocation.
  */
 export function monthlyEssentials(state) {
-  const needs = state.monthly?.budget || 200;
+  // A declared budget of 0 is legitimate (recurring-only user) — only fall back
+  // to the 200 default when the field is genuinely absent / non-finite.
+  const needs = Number.isFinite(state.monthly?.budget) ? state.monthly.budget : 200;
   const recurring = (state.recurringExpenses || [])
     .filter(e => e.active)
     .reduce((s, e) => s + normalizeToMonthly(e), 0);
   return needs + recurring;
 }
 
+const MS_PER_DAY = 86_400_000;
+
+/** True when a stored targetDate carries an explicit day (YYYY-MM-DD). */
+function hasDayComponent(dateStr) {
+  if (typeof dateStr !== 'string') return false;
+  const parts = dateStr.split('-');
+  return parts.length >= 3 && parts[2] !== '' && Number.isFinite(parseInt(parts[2], 10));
+}
+
+/**
+ * Parse a goal target date into a UTC-midnight Date, accepting BOTH the new
+ * day-level format (YYYY-MM-DD) and legacy month-only values (YYYY-MM). A
+ * legacy month is treated as the LAST day of that month — the most forgiving
+ * interpretation of "by <month>", and it preserves the pre-day-precision
+ * behaviour (the goal stays "due this month" for the whole month).
+ *
+ * Returns null for empty / malformed input.
+ */
+export function parseGoalDate(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const parts = dateStr.split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  if (hasDayComponent(dateStr)) {
+    return new Date(Date.UTC(y, m - 1, parseInt(parts[2], 10)));
+  }
+  // Month-only → last calendar day of that month (day 0 of the next month).
+  return new Date(Date.UTC(y, m, 0));
+}
+
+/** Today at UTC midnight — the reference point for day-accurate comparisons. */
+function utcToday() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/**
+ * Day-accurate savings plan for a dated goal. Returns:
+ *   { needed, months, days, status }
+ *   - status: 'overdue' | 'due-now' | 'active'
+ *   - days:   whole days until the deadline (negative when overdue)
+ *   - months: number of monthly contribution slots (installments)
+ *   - needed: amount to set aside per slot to hit the target on time
+ *
+ * The allocator relies on `status`, `months` and `needed`; `days` is additive
+ * for the UI countdown. Returns null for undated or already-funded goals.
+ */
 export function getMonthlySaving(goal) {
   if (!goal.targetDate || goal.saved >= goal.target) return null;
-  const now = new Date();
-  const curY = now.getUTCFullYear();
-  const curM = now.getUTCMonth();
-  const [tYear, tMonth] = goal.targetDate.split('-');
-  const tY = parseInt(tYear, 10);
-  const tM = parseInt(tMonth, 10) - 1;
+  const target = parseGoalDate(goal.targetDate);
+  if (!target) return null;
 
-  const monthsDiff = (tY - curY) * 12 + (tM - curM);
+  const today = utcToday();
+  const remaining = goal.target - goal.saved;
+  const days = Math.round((target.getTime() - today.getTime()) / MS_PER_DAY);
 
-  if (monthsDiff < 0) {
-    return { needed: goal.target - goal.saved, months: 0, status: 'overdue' };
+  if (days < 0) {
+    return { needed: remaining, months: 0, days, status: 'overdue' };
   }
 
-  if (monthsDiff === 0) {
-    return { needed: goal.target - goal.saved, months: 0, status: 'due-now' };
+  // Whole-month distance between today's month and the deadline's month.
+  const monthsDiff = (target.getUTCFullYear() - today.getUTCFullYear()) * 12
+                   + (target.getUTCMonth() - today.getUTCMonth());
+
+  if (monthsDiff <= 0) {
+    // Deadline is later this month (or today) → fund it fully now.
+    return { needed: remaining, months: 0, days, status: 'due-now' };
   }
 
   const installments = monthsDiff + 1;
-  return { needed: Math.ceil((goal.target - goal.saved) / installments), months: installments, status: 'active' };
+  return { needed: Math.ceil(remaining / installments), months: installments, days, status: 'active' };
+}
+
+/**
+ * Normalise any stored targetDate to a YYYY-MM-DD value for `<input type="date">`.
+ * Legacy month-only goals resolve to their effective deadline (end of month) so
+ * editing them doesn't silently move the date earlier.
+ */
+export function toDateInputValue(dateStr) {
+  const d = parseGoalDate(dateStr);
+  return d ? d.toISOString().slice(0, 10) : '';
 }
 
 export function formatTargetDate(dateStr) {
-  if (!dateStr) return '';
-  const [year, month] = dateStr.split('-');
-  const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
-  return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  const date = parseGoalDate(dateStr);
+  if (!date) return '';
+  // Format from the UTC parts so a UTC-midnight date never renders as the prior
+  // day in negative-offset timezones.
+  return date.toLocaleDateString(undefined, hasDayComponent(dateStr)
+    ? { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }
+    : { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }

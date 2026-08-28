@@ -131,7 +131,7 @@ describe('[S7] Rapid React state churn', () => {
   });
 
   it('interleaved ADD_INCOME and ADD_EXPENSE stay consistent', async () => {
-    // ADD_INCOME adds to cash; ADD_EXPENSE drains the buffer + monthly.spent (not cash).
+    // ADD_INCOME adds to cash; ADD_EXPENSE now pays cash-first, then buffer.
     localStorage.setItem('finplan_v6', JSON.stringify(makeInitialState(500)));
 
     let capturedState = null;
@@ -155,14 +155,17 @@ describe('[S7] Rapid React state churn', () => {
       }
     });
 
-    // cash: 500 + 10*100 = 1500 (ADD_EXPENSE does not touch cash)
-    expect(capturedState.cash).toBe(1500);
+    // Each iteration: +100 to cash, then a 50 expense paid entirely from cash
+    // (cash always covers it) → net +50/iter. cash: 500 + 10*50 = 1000.
+    expect(capturedState.cash).toBe(1000);
     // monthly.spent: 0 + 10*50 = 500
     expect(capturedState.monthly.spent).toBe(500);
     // 10 expense entries logged
     expect(capturedState.monthly.expenses.length).toBe(10);
-    // buffer drained by 10*50 = 500; initial buffer=5000 → 4500
+    // buffer never touched because cash covered every expense → stays 5000.
     const buf = capturedState.goals.find(g => g.isBuffer);
-    expect(buf.saved).toBe(4500);
+    expect(buf.saved).toBe(5000);
+    // Every entry records a full cash-funded split (conservation invariant #2).
+    expect(capturedState.monthly.expenses.every(e => e.paidFromCash === 50 && e.paidFromBuffer === 0)).toBe(true);
   });
 });

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { calculateBufferTarget, monthlyEssentials, formatTargetDate } from './storeUtils';
+import { calculateBufferTarget, monthlyEssentials, formatTargetDate, parseGoalDate, toDateInputValue, getMonthlySaving } from './storeUtils';
+
+/** Build a YYYY-MM-DD string offset from today (UTC) by `deltaDays`. */
+function isoDaysFromToday(deltaDays) {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + deltaDays));
+  return d.toISOString().slice(0, 10);
+}
 
 // Helpers to build state fixtures using the new recurringExpenses model
 function makeState({ budget = 300, safetyMonths, recurringExpenses = [], goals = [] } = {}) {
@@ -20,6 +27,54 @@ describe('storeUtils', () => {
         });
         it('returns empty string for empty input', () => {
             expect(formatTargetDate('')).toBe('');
+        });
+        it('includes the day for full YYYY-MM-DD dates', () => {
+            const formatted = formatTargetDate('2026-08-15');
+            expect(formatted).toMatch(/15/);
+            expect(formatted).toMatch(/2026/);
+        });
+    });
+
+    describe('parseGoalDate (day-level dates)', () => {
+        it('parses a full YYYY-MM-DD as that exact UTC day', () => {
+            const d = parseGoalDate('2026-08-15');
+            expect(d.getUTCFullYear()).toBe(2026);
+            expect(d.getUTCMonth()).toBe(7); // August (0-based)
+            expect(d.getUTCDate()).toBe(15);
+        });
+        it('treats a legacy YYYY-MM as the LAST day of that month', () => {
+            expect(toDateInputValue('2026-02')).toBe('2026-02-28'); // 2026 not a leap year
+            expect(toDateInputValue('2026-08')).toBe('2026-08-31');
+        });
+        it('returns null for empty / malformed input', () => {
+            expect(parseGoalDate('')).toBeNull();
+            expect(parseGoalDate('garbage')).toBeNull();
+            expect(parseGoalDate(undefined)).toBeNull();
+        });
+    });
+
+    describe('getMonthlySaving (day-accurate plan)', () => {
+        it('flags a past date as overdue with negative days', () => {
+            const plan = getMonthlySaving({ target: 1000, saved: 100, targetDate: isoDaysFromToday(-3) });
+            expect(plan.status).toBe('overdue');
+            expect(plan.days).toBeLessThan(0);
+            expect(plan.needed).toBe(900); // full remaining
+        });
+        it('flags today as due-now with zero days', () => {
+            const plan = getMonthlySaving({ target: 1000, saved: 100, targetDate: isoDaysFromToday(0) });
+            expect(plan.status).toBe('due-now');
+            expect(plan.days).toBe(0);
+        });
+        it('spreads a future deadline into installments with a positive countdown', () => {
+            const plan = getMonthlySaving({ target: 1200, saved: 0, targetDate: isoDaysFromToday(120) });
+            expect(plan.status).toBe('active');
+            expect(plan.days).toBeGreaterThan(100);
+            expect(plan.months).toBeGreaterThanOrEqual(2);
+            expect(plan.needed).toBeLessThan(1200); // spread, not lump-sum
+        });
+        it('returns null for an undated or already-funded goal', () => {
+            expect(getMonthlySaving({ target: 1000, saved: 0, targetDate: '' })).toBeNull();
+            expect(getMonthlySaving({ target: 1000, saved: 1000, targetDate: isoDaysFromToday(30) })).toBeNull();
         });
     });
 
