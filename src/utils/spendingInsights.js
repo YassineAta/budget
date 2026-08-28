@@ -271,7 +271,11 @@ export function getSeasonalBurn(expenses, opts = {}) {
 
   // Bayesian blend: prior counts as PRIOR_STRENGTH pseudo-observations so that
   // the posterior shifts smoothly toward current actuals as data accumulates.
-  const PRIOR_STRENGTH = 2;
+  // Set to 6 (matching the number of seeded historical months) so that a single
+  // anomalous school month (e.g. high May end-of-year spending) can't dominate
+  // the estimate — the historical baseline stays influential until ~6 real months
+  // of this year's school data have been logged.
+  const PRIOR_STRENGTH = 6;
 
   function blend(current, historical) {
     const histAdj = historical.map(v => v * (1 + growthRate));
@@ -347,17 +351,6 @@ export function getSeasonalRunoutDate(bufferAmount, expenses, declaredMonthly, o
 
   const seasonal = getSeasonalBurn(expenses, { asOf, historicalSeasons, growthRate });
   const recency  = getWeightedMonthlyBurn(expenses, { asOf });
-
-  // eslint-disable-next-line no-console
-  console.log('[seasonal-runout] debug', {
-    bufferAmount,
-    declaredMonthly,
-    historicalCount: historicalSeasons.length,
-    growthRate,
-    summer: seasonal.summer,
-    school: seasonal.school,
-    recency,
-  });
 
   let remaining = bufferAmount;
   const ref = new Date(asOf);
