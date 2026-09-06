@@ -98,6 +98,7 @@ export default function MonthlySpending() {
                         <div className="input-row">
                             <input
                                 type="number"
+                                step="any"
                                 aria-label="Monthly budget"
                                 value={newBudget}
                                 onChange={e => setNewBudget(e.target.value)}
@@ -192,6 +193,7 @@ export default function MonthlySpending() {
                         />
                         <input
                             type="number"
+                            step="any"
                             aria-label="Expense amount"
                             placeholder="Amt"
                             value={expenseAmt}

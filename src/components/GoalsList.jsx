@@ -173,7 +173,7 @@ export default function GoalsList() {
                             ))}
                         </select>
                         <div className="input-row">
-                            <input type="number" placeholder="Amount" value={moveAmt} onChange={e => setMoveAmt(e.target.value)} min="0" />
+                            <input type="number" step="any" placeholder="Amount" value={moveAmt} onChange={e => setMoveAmt(e.target.value)} min="0" />
                             <button className="btn btn-blue" type="submit">
                                 <IconArrowRight /> Move
                             </button>
@@ -198,6 +198,7 @@ export default function GoalsList() {
                         <div className="input-row">
                             <input
                                 type="number"
+                                step="any"
                                 placeholder="Target price"
                                 value={target}
                                 onChange={e => setTarget(e.target.value)}
@@ -319,6 +320,7 @@ export default function GoalsList() {
                         <div className="input-row">
                             <input
                                 type="number"
+                                step="any"
                                 placeholder="Amount"
                                 value={recAmount}
                                 onChange={e => setRecAmount(e.target.value)}

@@ -105,6 +105,7 @@ export default function IncomeEvents() {
                             />
                             <input
                                 type="number"
+                                step="any"
                                 placeholder="Amount"
                                 value={amount}
                                 onChange={e => setAmount(e.target.value)}

@@ -233,6 +233,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                     <div className="input-row">
                         <input
                             type="number"
+                            step="any"
                             aria-label="Target amount"
                             value={editTarget}
                             onChange={e => setEditTarget(e.target.value)}
@@ -277,6 +278,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                 <form onSubmit={handleFund} className="input-row">
                     <input
                         type="number"
+                        step="any"
                         placeholder="Amount"
                         value={fundAmt}
                         onChange={e => setFundAmt(e.target.value)}
@@ -301,6 +303,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                 <form onSubmit={handleWithdraw} className="input-row">
                     <input
                         type="number"
+                        step="any"
                         placeholder="Amount"
                         value={withdrawAmt}
                         onChange={e => setWithdrawAmt(e.target.value)}
