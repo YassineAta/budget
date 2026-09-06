@@ -126,16 +126,19 @@ export function rootReducer(state, action) {
       // dropping the goal), so deleting this record must refund nothing.
       const spentAmt = r2(nn(goal.saved));
       const date = new Date().toISOString();
-      const inCurrentMonth = date.slice(0, 7) === thisMonth;
       const entry = spentAmt > 0
         ? [{ id: uid(), name: `Purchased: ${goal.name}`, amount: spentAmt, date, paidFromCash: 0, paidFromBuffer: 0, isPurchase: true }]
         : [];
+      // NOTE: this money was allocated to the goal over time, not spent from this
+      // month's budget — so it is logged in the ledger for the audit trail but is
+      // deliberately EXCLUDED from monthly.spent. The invariant is therefore
+      // `spent === sum(current-month expenses WHERE NOT isPurchase)`, enforced at
+      // every sum site (DELETE_EXPENSE, RESET_MONTHLY, store rollover recompute).
       next = {
         ...base,
         goals: base.goals.filter(g => g.id !== action.id),
         monthly: {
           ...base.monthly,
-          spent: inCurrentMonth ? r2((base.monthly.spent || 0) + spentAmt) : base.monthly.spent,
           expenses: [...base.monthly.expenses, ...entry],
         },
       };
@@ -209,6 +212,10 @@ export function rootReducer(state, action) {
       break;
     }
 
+    case 'SET_AI_PROFILE':
+      next = { ...base, aiProfile: { ...(base.aiProfile || {}), ...action.updates } };
+      break;
+
     case 'SET_BUFFER_MAX':
       // Kept for backwards-compat with any stored dispatches
       next = { ...base, bufferMaxMonths: action.value };
@@ -264,14 +271,16 @@ export function rootReducer(state, action) {
       const goals = base.goals.map(g => g.isBuffer ? { ...g, saved: r2(g.saved + refundBuffer) } : g);
       // The spent counter only tracks the current month — deleting a historical
       // ledger entry must not distort it.
-      const inCurrentMonth = typeof exp.date === 'string' && exp.date.slice(0, 7) === thisMonth;
+      // Purchase entries were never added to monthly.spent (goal money, not
+      // budget spend), so deleting one must not decrement it either.
+      const affectsSpent = !exp.isPurchase && typeof exp.date === 'string' && exp.date.slice(0, 7) === thisMonth;
       next = {
         ...base,
         cash: r2(base.cash + refundCash),
         goals,
         monthly: {
           ...base.monthly,
-          spent: inCurrentMonth ? r2(base.monthly.spent - nn(exp.amount)) : base.monthly.spent,
+          spent: affectsSpent ? r2(base.monthly.spent - nn(exp.amount)) : base.monthly.spent,
           expenses: base.monthly.expenses.filter(e => e.id !== action.id),
         },
       };
@@ -284,7 +293,7 @@ export function rootReducer(state, action) {
       // and recomputes the live spent counter from this month's ledger entries.
       const ledger = Array.isArray(base.monthly?.expenses) ? base.monthly.expenses : [];
       const spent = ledger.reduce(
-        (sum, e) => (typeof e?.date === 'string' && e.date.slice(0, 7) === thisMonth
+        (sum, e) => (!e?.isPurchase && typeof e?.date === 'string' && e.date.slice(0, 7) === thisMonth
           ? sum + (Number(e.amount) || 0)
           : sum),
         0,

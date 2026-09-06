@@ -971,3 +971,77 @@ label.field-label {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* ───────────────────────────  AI CHAT  ─────────────────────────── */
+.ai-chat-window {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  min-height: 260px;
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-msg {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.ai-msg-user { flex-direction: row-reverse; }
+
+.ai-msg-icon {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  background: var(--purple-soft);
+  border: 1px solid rgba(154, 127, 176, 0.25);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--purple);
+}
+.ai-msg-icon svg { width: 13px; height: 13px; }
+
+.ai-msg-bubble {
+  max-width: 87%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.65;
+}
+
+.ai-msg-model .ai-msg-bubble {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) var(--radius-sm);
+}
+
+.ai-msg-user .ai-msg-bubble {
+  background: var(--green-soft);
+  border: 1px solid rgba(90, 143, 107, 0.22);
+  color: var(--green-2);
+  border-radius: var(--radius-sm) 0 var(--radius-sm) var(--radius-sm);
+}
+
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-3) var(--space-4);
+}
+.ai-thinking span {
+  width: 7px; height: 7px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  animation: ai-bounce 1.2s ease-in-out infinite;
+}
+.ai-thinking span:nth-child(2) { animation-delay: 160ms; }
+.ai-thinking span:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes ai-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}

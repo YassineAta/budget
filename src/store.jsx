@@ -442,7 +442,7 @@ export function loadState() {
       if (s.monthly && s.monthly.resetDate !== currentMonth) {
         const ledger = Array.isArray(s.monthly.expenses) ? s.monthly.expenses : [];
         const spent = ledger.reduce(
-          (sum, e) => (typeof e?.date === 'string' && e.date.slice(0, 7) === currentMonth
+          (sum, e) => (!e?.isPurchase && typeof e?.date === 'string' && e.date.slice(0, 7) === currentMonth
             ? sum + (Number(e.amount) || 0)
             : sum),
           0,

@@ -7,14 +7,16 @@ import IncomeEvents from './components/IncomeEvents';
 import {
     IconHome, IconWallet, IconTarget, IconBanknote,
     IconUpload, IconDownload, IconAlertTriangle,
-    IconChevronDown, IconX, IconClock,
+    IconChevronDown, IconX, IconClock, IconBrain,
 } from './components/icons';
+import AIAdvisor from './components/AIAdvisor';
 
 const TABS = [
     { id: 'dashboard', label: 'Home',   Icon: IconHome },
     { id: 'spending',  label: 'Spend',  Icon: IconWallet },
     { id: 'goals',     label: 'Goals',  Icon: IconTarget },
     { id: 'income',    label: 'Income', Icon: IconBanknote },
+    { id: 'ai',        label: 'AI',     Icon: IconBrain },
 ];
 
 function BackupButtons() {
@@ -210,6 +212,12 @@ function AppContent() {
                     {tab === 'spending'  && <MonthlySpending />}
                     {tab === 'goals'     && <GoalsList />}
                     {tab === 'income'    && <IncomeEvents />}
+                    {tab === 'ai'        && (
+                        <div>
+                            <div className="card-title mb-3"><IconBrain /> AI Financial Advisor</div>
+                            <AIAdvisor />
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

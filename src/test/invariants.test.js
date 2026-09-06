@@ -195,7 +195,8 @@ describe('Invariant #1 — PURCHASE_ITEM records a ledger entry (double-entry)',
     expect(entry.amount).toBe(500);
     expect(entry.paidFromCash).toBe(0);
     expect(entry.paidFromBuffer).toBe(0);
-    expect(s.monthly.spent).toBe(500);
+    // Goal money was pre-allocated — it is logged but NOT counted as this month's spend.
+    expect(s.monthly.spent).toBe(0);
     expect(totalMoney(s)).toBe(before - 500); // money left the system, logged
 
     // Deleting the purchase record must refund nothing (money already spent).

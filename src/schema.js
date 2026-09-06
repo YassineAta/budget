@@ -81,6 +81,12 @@ export const stateSchema = z.object({
   }).passthrough()).optional(),
   /** Expected year-over-year growth in spending (inflation + income lift). Default 0.15 = 15%. */
   historicalGrowthRate: z.number().min(0).max(2).optional(),
+  /** Persisted AI advisor data — priorities profile and metadata. */
+  aiProfile: z.object({
+    priorities: z.string().optional(),
+    lastPrioritiesAt: z.string().optional(),
+    lastReviewAt: z.string().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 /** Increment this whenever a new migration is added. */
