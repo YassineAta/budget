@@ -1,5 +1,9 @@
 // Gemini model IDs (Google AI Studio / Gemini API).
-// Deep = most capable, used for monthly review + priorities. Lite = fast chat.
+// Deep = gemini-2.5-pro: most capable stable Pro, used for monthly review + priorities.
+//   Free tier: 5 RPM / 100 RPD. Paid (pro offer): spend-based, no hard RPD cap.
+// Lite = gemini-2.5-flash: fast workhorse for chat.
+//   Free tier: 10 RPM / 250 RPD. Paid: effectively unlimited.
+// Upgrade options: gemini-3.1-pro-preview (deep), gemini-3.8-flash (lite) — paid only.
 const DEEP_MODEL = 'gemini-2.5-pro';
 const LITE_MODEL = 'gemini-2.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -7,7 +11,9 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const KEY_LS       = 'finplan_ai_key';
 const RPD_DATE_LS  = 'finplan_ai_rpd_date';
 const RPD_COUNT_LS = 'finplan_ai_rpd_count';
-export const DEEP_RPD_CAP = 18; // leave 2 under the 20/day quota
+// Soft daily cap on deep (Pro) calls. Free tier = 100 RPD; paid tier has no hard cap.
+// Set conservatively — a personal finance app rarely needs >50 deep analyses/day.
+export const DEEP_RPD_CAP = 50;
 
 export const getApiKey = () => localStorage.getItem(KEY_LS) || '';
 export const setApiKey = k => localStorage.setItem(KEY_LS, k.trim());

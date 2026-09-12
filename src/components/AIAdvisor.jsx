@@ -232,7 +232,7 @@ export default function AIAdvisor() {
         </button>
       </div>
       <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-dim)', marginTop: 'var(--space-1)' }}>
-        Chat → Gemini 2.5 Flash · Review / Priorities → Gemini 2.5 Pro (deep)
+        Chat → Gemini 2.5 Flash (250 req/day free) · Review / Priorities → Gemini 2.5 Pro (100 req/day free)
       </div>
     </div>
   );
