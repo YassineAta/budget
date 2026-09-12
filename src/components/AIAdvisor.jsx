@@ -19,13 +19,13 @@ function KeySetup({ onSave }) {
     <div className="card subtle">
       <div className="card-title"><IconBrain /> Activate AI Advisor</div>
       <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)', lineHeight: 1.6 }}>
-        Paste your Gemini API key to enable your personal financial advisor.
-        Your key is stored locally in this browser only — never sent anywhere except Google.
+        Get a free key at <strong>aistudio.google.com → API Keys</strong> (create a new one — old AIza keys were deprecated Sep 2026).
+        Stored locally in this browser only, never sent anywhere except Google.
       </p>
       <div className="input-row">
         <input
           type="password"
-          placeholder="AIzaSy..."
+          placeholder="Paste your Gemini API key…"
           value={val}
           onChange={e => setVal(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && val && onSave(val)}
