@@ -1,7 +1,7 @@
-// Update these if Google changes the API model IDs — display names vs API IDs differ.
-// Deep = smartest model (20 req/day cap). Lite = fast chat (500 req/day).
-const DEEP_MODEL = 'gemini-2.5-flash';
-const LITE_MODEL = 'gemini-2.0-flash-lite';
+// Gemini model IDs (Google AI Studio / Gemini API).
+// Deep = most capable, used for monthly review + priorities. Lite = fast chat.
+const DEEP_MODEL = 'gemini-2.5-pro';
+const LITE_MODEL = 'gemini-2.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const KEY_LS       = 'finplan_ai_key';

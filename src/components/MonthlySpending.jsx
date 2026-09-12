@@ -37,7 +37,7 @@ export default function MonthlySpending() {
     const activeMonth = browsableMonths.includes(selectedMonth) ? selectedMonth : currentMonth;
     const monthIdx = browsableMonths.indexOf(activeMonth);
     const monthExpenses = ledger.filter(e => e.date?.slice(0, 7) === activeMonth);
-    const monthTotal = monthExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const monthTotal = monthExpenses.filter(e => !e.isPurchase).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const isCurrentMonth = activeMonth === currentMonth;
 
     const [isEditing, setIsEditing] = useState(false);
@@ -258,7 +258,8 @@ export default function MonthlySpending() {
                 {monthExpenses.length === 0
                     ? <div className="empty-state">No expenses in {monthLabel(activeMonth)}</div>
                     : monthExpenses.slice().reverse().map(exp => (
-                        <div key={exp.id} className={`list-item ${exp.isRecurring ? 'recurring' : ''}`}>
+                        <div key={exp.id} className={`list-item ${exp.isRecurring ? 'recurring' : ''}`}
+                            style={exp.isPurchase ? { opacity: 0.6 } : undefined}>
                             <div className="list-item-info">
                                 <div className="list-item-name row-tight">
                                     {exp.isRecurring && (
@@ -270,18 +271,23 @@ export default function MonthlySpending() {
                                     )}
                                     {exp.name}
                                 </div>
-                                <div className="list-item-meta">{new Date(exp.date).toLocaleDateString()}</div>
+                                <div className="list-item-meta">
+                                    {new Date(exp.date).toLocaleDateString()}
+                                    {exp.isPurchase && <span style={{ marginLeft: 6, color: 'var(--text-dim)' }}>· from goal savings</span>}
+                                </div>
                             </div>
                             <div className="row">
                                 <span className="list-item-amount">{exp.amount.toLocaleString()} {cur}</span>
-                                <button
-                                    className="btn btn-sm btn-ghost btn-icon"
-                                    aria-label={`Delete ${exp.name}`}
-                                    onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
-                                    style={{ color: 'var(--red)' }}
-                                >
-                                    <IconTrash />
-                                </button>
+                                {!exp.isPurchase && (
+                                    <button
+                                        className="btn btn-sm btn-ghost btn-icon"
+                                        aria-label={`Delete ${exp.name}`}
+                                        onClick={() => dispatch({ type: 'DELETE_EXPENSE', id: exp.id })}
+                                        style={{ color: 'var(--red)' }}
+                                    >
+                                        <IconTrash />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))
