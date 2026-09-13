@@ -57,7 +57,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
         // only so the Fund form never lets them over-allocate from cash.
         const progress = calculateProgress(goal.saved + placementValue, goal.target);
         const remaining = Math.max(0, goal.target - goal.saved);
-        return { ...progress, remaining, plan: getMonthlySaving(goal), placementValue };
+        return { ...progress, remaining, plan: getMonthlySaving({ ...goal, saved: goal.saved + placementValue }), placementValue };
     }, [goal]);
 
     const Icon = goalIcon(goal);
