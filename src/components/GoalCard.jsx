@@ -122,11 +122,12 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                 const nav = await fetchNav(f.slug);
                 dispatch({ type: 'UPDATE_NAV_CACHE', id: goal.id, slug: f.slug, nav });
             } catch (e) {
+                console.error(`[NAV] ${f.label}:`, e.message);
                 failed.push(f.label);
             }
         }));
         setNavLoading(false);
-        if (failed.length) setNavError(`Couldn't fetch: ${failed.join(', ')}. Showing cached values.`);
+        if (failed.length) setNavError(`Couldn't fetch: ${failed.join(', ')}. Check console for details.`);
     }
 
     // Auto-refresh stale NAVs on mount (once per component lifetime).
