@@ -1,15 +1,28 @@
-// Fetches NAV (valeur liquidative) for Tunisian SICAV/FCP funds from ilboursa.com.
-// Tries three CORS proxies in order; stops at first success.
-// Cache TTL: 24h — funds publish NAV daily.
+// Fetches NAV for Tunisian SICAV/FCP funds.
+// Primary source: millim.tn (doesn't block CORS proxies).
+// Fallback: ilboursa.com (returns 403 to most proxies but kept as last resort).
+// Cache TTL: 24h.
 
+import { TUNISIAN_FUNDS } from './tunisianFunds';
+
+const MILLIM_BASE = 'https://www.millim.tn/fund/';
 const ILBOURSA_BASE = 'https://www.ilboursa.com/opcvm/';
 export const NAV_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-// French number: comma decimal, optional whitespace as thousands separator.
-// e.g. "23,07" or "1 234,56". \s covers space, nbsp, thin-space, etc.
-const NAV_REGEX = /VALEUR LIQUIDATIVE[\s\S]{0,600}?(\d[\d\s]*,\d+)/;
+// millim.tn: NAV rendered as "23.155TND" or "159.984TND" in SSR HTML.
+// Also check __NEXT_DATA__ JSON blob which Next.js embeds in every page.
+const MILLIM_PATTERNS = [
+  // __NEXT_DATA__ JSON — most reliable
+  /"(?:nav|vl|value|valeur_liquidative)"\s*:\s*([\d.]+)/i,
+  // Direct number+TND in HTML (no space between them)
+  /(\d+\.\d{2,4})TND/,
+  // Number followed by TND within 80 chars (HTML tags in between)
+  /(\d+\.\d{2,4})[^,\d]{0,80}?TND/,
+];
 
-// Proxies tried in order; first success wins.
+// ilboursa.com: French format "23,07" or "1 234,56" after the heading.
+const ILBOURSA_REGEX = /VALEUR LIQUIDATIVE[\s\S]{0,600}?(\d[\d\s]*,\d+)/;
+
 const PROXIES = [
   {
     name: 'corsproxy.io',
@@ -22,7 +35,7 @@ const PROXIES = [
     extractHtml: async (res) => {
       const json = await res.json();
       if (json?.status?.http_code && json.status.http_code !== 200)
-        throw new Error(`ilboursa returned HTTP ${json.status.http_code}`);
+        throw new Error(`target returned HTTP ${json.status.http_code}`);
       if (!json?.contents) throw new Error('empty contents');
       return json.contents;
     },
@@ -34,31 +47,47 @@ const PROXIES = [
   },
 ];
 
-export async function fetchNav(slug) {
-  const targetUrl = `${ILBOURSA_BASE}${slug}`;
+async function tryFetch(targetUrl, patterns) {
   const errors = [];
-
   for (const proxy of PROXIES) {
     try {
       const res = await fetch(proxy.buildUrl(targetUrl), { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const html = await proxy.extractHtml(res);
       if (!html || html.length < 200) throw new Error('near-empty body');
-
-      const match = html.match(NAV_REGEX);
-      if (!match) throw new Error('NAV pattern not found in page');
-
-      // Remove all whitespace (thousands sep), swap comma to period, parse
-      const nav = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
-      if (!Number.isFinite(nav) || nav <= 0) throw new Error(`invalid NAV "${match[1]}"`);
-      return nav;
+      for (const pat of patterns) {
+        const m = html.match(pat);
+        if (m) {
+          // millim values use period; ilboursa uses comma — normalise both
+          const nav = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
+          if (Number.isFinite(nav) && nav > 0) return nav;
+        }
+      }
+      throw new Error('NAV pattern not found');
     } catch (err) {
       errors.push(`[${proxy.name}] ${err.message}`);
     }
   }
+  return { errors };
+}
 
-  throw new Error(errors.join(' | '));
+export async function fetchNav(slug) {
+  const fund = TUNISIAN_FUNDS.find(f => f.slug === slug);
+  const allErrors = [];
+
+  // 1. Try millim.tn first (doesn't block CORS proxies)
+  if (fund?.millimSlug) {
+    const result = await tryFetch(`${MILLIM_BASE}${fund.millimSlug}/`, MILLIM_PATTERNS);
+    if (typeof result === 'number') return result;
+    allErrors.push(...result.errors.map(e => `millim: ${e}`));
+  }
+
+  // 2. Fall back to ilboursa.com
+  const result = await tryFetch(`${ILBOURSA_BASE}${slug}`, [ILBOURSA_REGEX]);
+  if (typeof result === 'number') return result;
+  allErrors.push(...result.errors.map(e => `ilboursa: ${e}`));
+
+  throw new Error(allErrors.join(' | '));
 }
 
 export function isNavStale(fetchedAt) {
