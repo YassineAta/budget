@@ -212,61 +212,76 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         color={barColor}
                     />
 
-                    {/* SICAV/FCP placement section */}
+                    {/* Investment panel */}
                     {goal.placement?.funds?.length > 0 && (
-                        <div className="card subtle mt-3" style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-sm)' }}>
-                            <div className="flex-between mb-2">
-                                <div className="row-tight" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>
-                                    <IconChart size={12} /> Placement SICAV/FCP
-                                </div>
-                                <div className="row-tight">
-                                    {navLoading && (
-                                        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-dim)' }}>fetching…</span>
-                                    )}
-                                    <button
-                                        className="btn btn-ghost btn-icon btn-sm"
-                                        onClick={() => fetchAllNavs()}
-                                        disabled={navLoading}
-                                        title="Refresh NAV from ilboursa"
-                                        style={{ padding: 2 }}
-                                    >
-                                        <IconRepeat size={11} />
-                                    </button>
-                                </div>
+                        <div className="mt-3" style={{
+                            background: 'var(--blue-soft)',
+                            border: '1px solid rgba(107,140,175,0.2)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: 'var(--space-3) var(--space-4)',
+                        }}>
+                            <div className="flex-between" style={{ marginBottom: 'var(--space-3)' }}>
+                                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--blue)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                    <IconChart size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                                    Investments
+                                </span>
+                                <button
+                                    className="btn btn-ghost btn-icon btn-sm"
+                                    onClick={() => fetchAllNavs()}
+                                    disabled={navLoading}
+                                    title="Refresh NAV from millim.tn"
+                                    style={{ color: 'var(--text-dim)' }}
+                                >
+                                    {navLoading
+                                        ? <span style={{ fontSize: 'var(--text-xs)', padding: '0 2px' }}>…</span>
+                                        : <IconRepeat size={13} />}
+                                </button>
                             </div>
-                            {goal.placement.funds.map(f => {
-                                const cached = goal.placement?.navCache?.[f.slug];
-                                const val = cached ? cached.nav * f.units : null;
-                                return (
-                                    <div key={f.slug} className="flex-between" style={{ fontSize: 'var(--text-xs)', marginBottom: 2 }}>
-                                        <span style={{ color: 'var(--text-muted)', flex: 1, marginRight: 8 }} title={f.slug}>
-                                            {f.label}
-                                        </span>
-                                        <span className="mono" style={{ color: 'var(--text-dim)', marginRight: 6 }}>
-                                            {f.units} u × {cached ? cached.nav.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '…'}
-                                        </span>
-                                        <span className="mono" style={{ fontWeight: 600 }}>
-                                            {val != null ? `${Math.round(val).toLocaleString()} ${cur}` : '—'}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                            <div className="flex-between mt-2" style={{ borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                                {goal.placement.funds.map(f => {
+                                    const cached = goal.placement?.navCache?.[f.slug];
+                                    const val = cached ? cached.nav * f.units : null;
+                                    return (
+                                        <div key={f.slug} className="flex-between" style={{ alignItems: 'flex-start' }}>
+                                            <div style={{ flex: 1, marginRight: 'var(--space-3)', minWidth: 0 }}>
+                                                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {f.label}
+                                                </div>
+                                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-dim)', marginTop: 2 }}>
+                                                    {f.units} units · NAV {cached
+                                                        ? `${cached.nav.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} ${cur}`
+                                                        : '—'}
+                                                </div>
+                                            </div>
+                                            <div className="mono" style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: val != null ? 'var(--text)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                                                {val != null ? `${Math.round(val).toLocaleString()} ${cur}` : '—'}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="flex-between" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-2)', borderTop: '1px solid rgba(107,140,175,0.18)' }}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-dim)' }}>
                                     {(() => {
                                         const dates = Object.values(goal.placement?.navCache || {}).map(c => new Date(c.fetchedAt));
-                                        if (!dates.length) return 'No data yet';
+                                        if (!dates.length) return 'No data yet — click ↻';
                                         const oldest = new Date(Math.min(...dates));
                                         const h = Math.round((Date.now() - oldest) / 3_600_000);
-                                        return h < 1 ? 'Updated just now' : `Updated ${h}h ago`;
+                                        return h < 1 ? 'Updated just now · millim.tn' : `Updated ${h}h ago · millim.tn`;
                                     })()}
                                 </span>
-                                <span className="mono" style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
-                                    {Math.round(placementValue).toLocaleString()} {cur}
+                                <span className="mono" style={{ fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--blue)' }}>
+                                    {placementValue > 0 ? `${Math.round(placementValue).toLocaleString()} ${cur}` : '—'}
                                 </span>
                             </div>
+
                             {navError && (
-                                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--red)', marginTop: 4 }}>{navError}</div>
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-dim)', marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-1)', alignItems: 'flex-start' }}>
+                                    <span style={{ color: 'var(--yellow)', flexShrink: 0 }}>⚠</span>
+                                    {navError}
+                                </div>
                             )}
                         </div>
                     )}
@@ -329,9 +344,9 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                     );
                                     setMode('placement');
                                 }}
-                                title="Link SICAV/FCP investment"
+                                title="Link investment funds (SICAV / FCP)"
                             >
-                                <IconChart /> SICAV
+                                <IconChart /> Invest
                             </button>
                         )}
                         {!goal.isBuffer && (
@@ -451,53 +466,65 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
             )}
 
             {mode === 'placement' && placementDraft && (
-                <div className="mt-3" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3)' }}>
-                    <div className="card-title mb-2"><IconChart /> Link SICAV/FCP Placement</div>
-                    {placementDraft.map((entry, i) => (
-                        <div key={i} className="input-row mb-2">
-                            <select
-                                value={entry.slug}
-                                onChange={e => {
-                                    const fund = TUNISIAN_FUNDS.find(f => f.slug === e.target.value);
-                                    setPlacementDraft(d => d.map((x, j) => j === i
-                                        ? { ...x, slug: e.target.value, label: fund?.label || '' }
-                                        : x
-                                    ));
-                                }}
-                                style={{ flex: 2 }}
-                            >
-                                <option value="">— Select fund —</option>
-                                {TUNISIAN_FUNDS.map(f => (
-                                    <option key={f.slug} value={f.slug}>{f.label}</option>
-                                ))}
-                            </select>
-                            <input
-                                type="number"
-                                step="any"
-                                min="0"
-                                placeholder="Units"
-                                value={entry.units}
-                                onChange={e => setPlacementDraft(d => d.map((x, j) => j === i ? { ...x, units: e.target.value } : x))}
-                                style={{ width: 80 }}
-                            />
-                            <button
-                                className="btn btn-sm btn-ghost btn-icon"
-                                type="button"
-                                aria-label="Remove fund"
-                                onClick={() => setPlacementDraft(d => d.filter((_, j) => j !== i))}
-                            >
-                                <IconX />
-                            </button>
-                        </div>
-                    ))}
+                <div className="mt-3" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)' }}>
+                    <div className="card-title mb-3"><IconChart /> Link Investment Funds</div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                        {placementDraft.map((entry, i) => (
+                            <div key={i} style={{ background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3)' }}>
+                                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                                    <select
+                                        value={entry.slug}
+                                        onChange={e => {
+                                            const fund = TUNISIAN_FUNDS.find(f => f.slug === e.target.value);
+                                            setPlacementDraft(d => d.map((x, j) => j === i
+                                                ? { ...x, slug: e.target.value, label: fund?.label || '' }
+                                                : x
+                                            ));
+                                        }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <option value="">Select fund…</option>
+                                        {TUNISIAN_FUNDS.map(f => (
+                                            <option key={f.slug} value={f.slug}>{f.label}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="btn btn-ghost btn-icon btn-sm"
+                                        type="button"
+                                        aria-label="Remove fund"
+                                        onClick={() => setPlacementDraft(d => d.filter((_, j) => j !== i))}
+                                    >
+                                        <IconX />
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                        Units held
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        placeholder="0"
+                                        value={entry.units}
+                                        onChange={e => setPlacementDraft(d => d.map((x, j) => j === i ? { ...x, units: e.target.value } : x))}
+                                        style={{ flex: 1 }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
                     <button
-                        className="btn btn-sm btn-ghost mb-3"
+                        className="btn btn-sm btn-ghost mt-3"
                         type="button"
                         onClick={() => setPlacementDraft(d => [...d, { slug: '', label: '', units: '' }])}
                     >
-                        <IconPlus /> Add fund
+                        <IconPlus /> Add another fund
                     </button>
-                    <div className="flex-between">
+
+                    <div className="flex-between mt-4">
                         <button
                             className="btn btn-ghost btn-sm"
                             type="button"
@@ -515,7 +542,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                         setMode(null); setPlacementDraft(null);
                                     }}
                                 >
-                                    Remove
+                                    Remove all
                                 </button>
                             )}
                             <button
@@ -528,11 +555,10 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                     if (!funds.length) return;
                                     dispatch({ type: 'SET_GOAL_PLACEMENT', id: goal.id, placement: { funds } });
                                     setMode(null); setPlacementDraft(null);
-                                    // Fetch NAVs immediately after saving
                                     setTimeout(() => fetchAllNavs(funds), 50);
                                 }}
                             >
-                                <IconCheck /> Save & Fetch
+                                <IconCheck /> Save
                             </button>
                         </div>
                     </div>
