@@ -15,6 +15,19 @@ export const goalSchema = z.object({
   targetDate: z.string().optional(),
   /** 'saving' = normal savings goal; 'wishlist' = does not affect balance */
   type: z.enum(['saving', 'wishlist']).optional(),
+  /** Linked SICAV/FCP placement — external investment tracked for goal progress display only.
+   *  Never touches goal.saved or cash; purely for UI progress computation. */
+  placement: z.object({
+    funds: z.array(z.object({
+      slug: z.string(),
+      label: z.string(),
+      units: z.number().min(0),
+    })),
+    navCache: z.record(z.string(), z.object({
+      nav: z.number().min(0),
+      fetchedAt: z.string(),
+    })).optional(),
+  }).optional(),
 }).passthrough();
 
 export const recurringExpenseSchema = z.object({

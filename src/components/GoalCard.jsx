@@ -1,11 +1,14 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { useStore, getMonthlySaving, formatTargetDate, toDateInputValue } from '../store';
 import ProgressBar from './ProgressBar';
 import { calculateProgress } from '../utils/math';
+import { fetchNav, isNavStale } from '../utils/navFetcher';
+import { TUNISIAN_FUNDS } from '../utils/tunisianFunds';
 import {
     IconShield, IconTarget, IconHeart, IconCalendar, IconCart,
     IconCheckCircle, IconAlertOctagon, IconClock,
     IconPlus, IconMinus, IconEdit, IconTrash, IconX, IconCheck,
+    IconChart, IconRepeat,
 } from './icons';
 
 function goalIcon(goal) {
@@ -29,6 +32,12 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
     const [withdrawAmt, setWithdrawAmt] = useState('');
     const [mode, setMode] = useState(null);
 
+    // Placement (SICAV/FCP) state
+    const [navLoading, setNavLoading] = useState(false);
+    const [navError, setNavError] = useState(null);
+    const [placementDraft, setPlacementDraft] = useState(null);
+    const autoFetched = useRef(false);
+
     const [editName, setEditName] = useState(goal.name);
     const [editTarget, setEditTarget] = useState(goal.target);
     const [editPriority, setEditPriority] = useState(goal.priority);
@@ -36,14 +45,26 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
     const [editDate, setEditDate] = useState(toDateInputValue(goal.targetDate));
     const [editType, setEditType] = useState(goal.type || 'saving');
 
-    const { remaining, pct, isFunded, plan, barColor, pctColor } = useMemo(() => {
-        const progress = calculateProgress(goal.saved, goal.target);
-        return { ...progress, plan: getMonthlySaving(goal) };
+    const { remaining, pct, isFunded, plan, barColor, pctColor, placementValue } = useMemo(() => {
+        // Sum current market value of all SICAV/FCP funds from cached NAVs.
+        // This is external money — never touches goal.saved or cash.
+        const placementValue = (goal.placement?.funds || []).reduce((sum, f) => {
+            const cached = goal.placement?.navCache?.[f.slug];
+            return sum + (cached ? Number(cached.nav) * Number(f.units) : 0);
+        }, 0);
+        // Progress bar reflects combined (saved + placement) / target so the
+        // user sees the full picture, but remaining is capped to in-app savings
+        // only so the Fund form never lets them over-allocate from cash.
+        const progress = calculateProgress(goal.saved + placementValue, goal.target);
+        const remaining = Math.max(0, goal.target - goal.saved);
+        return { ...progress, remaining, plan: getMonthlySaving(goal), placementValue };
     }, [goal]);
 
     const Icon = goalIcon(goal);
     const iconKindClass = goalIconClass(goal);
-    const isPurchasable = isFunded && !goal.isBuffer && goal.type !== 'wishlist';
+    // Use raw saved (not combined) so placement value doesn't trigger the purchase
+    // button — the money must actually be in-app to complete a purchase.
+    const isPurchasable = goal.saved >= goal.target && !goal.isBuffer && goal.type !== 'wishlist';
 
     function handleFund(e) {
         e.preventDefault();
@@ -89,6 +110,33 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
             dispatch({ type: 'PURCHASE_ITEM', id: goal.id });
         }
     }
+
+    async function fetchAllNavs(funds) {
+        const targets = funds || goal.placement?.funds;
+        if (!targets?.length) return;
+        setNavLoading(true);
+        setNavError(null);
+        const failed = [];
+        await Promise.all(targets.map(async f => {
+            try {
+                const nav = await fetchNav(f.slug);
+                dispatch({ type: 'UPDATE_NAV_CACHE', id: goal.id, slug: f.slug, nav });
+            } catch (e) {
+                failed.push(f.label);
+            }
+        }));
+        setNavLoading(false);
+        if (failed.length) setNavError(`Couldn't fetch: ${failed.join(', ')}. Showing cached values.`);
+    }
+
+    // Auto-refresh stale NAVs on mount (once per component lifetime).
+    useEffect(() => {
+        if (autoFetched.current || !goal.placement?.funds?.length) return;
+        const stale = goal.placement.funds.some(f => isNavStale(goal.placement?.navCache?.[f.slug]?.fetchedAt));
+        if (!stale) return;
+        autoFetched.current = true;
+        fetchAllNavs(goal.placement.funds);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (compact) {
         return (
@@ -155,11 +203,72 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                     </div>
 
                     <ProgressBar
-                        value={goal.saved}
+                        value={goal.saved + placementValue}
                         max={goal.target}
-                        label={`${goal.saved.toLocaleString()} / ${goal.target.toLocaleString()}`}
+                        label={placementValue > 0
+                            ? `${(goal.saved + placementValue).toLocaleString()} / ${goal.target.toLocaleString()}`
+                            : `${goal.saved.toLocaleString()} / ${goal.target.toLocaleString()}`}
                         color={barColor}
                     />
+
+                    {/* SICAV/FCP placement section */}
+                    {goal.placement?.funds?.length > 0 && (
+                        <div className="card subtle mt-3" style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-sm)' }}>
+                            <div className="flex-between mb-2">
+                                <div className="row-tight" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>
+                                    <IconChart size={12} /> Placement SICAV/FCP
+                                </div>
+                                <div className="row-tight">
+                                    {navLoading && (
+                                        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-dim)' }}>fetching…</span>
+                                    )}
+                                    <button
+                                        className="btn btn-ghost btn-icon btn-sm"
+                                        onClick={() => fetchAllNavs()}
+                                        disabled={navLoading}
+                                        title="Refresh NAV from ilboursa"
+                                        style={{ padding: 2 }}
+                                    >
+                                        <IconRepeat size={11} />
+                                    </button>
+                                </div>
+                            </div>
+                            {goal.placement.funds.map(f => {
+                                const cached = goal.placement?.navCache?.[f.slug];
+                                const val = cached ? cached.nav * f.units : null;
+                                return (
+                                    <div key={f.slug} className="flex-between" style={{ fontSize: 'var(--text-xs)', marginBottom: 2 }}>
+                                        <span style={{ color: 'var(--text-muted)', flex: 1, marginRight: 8 }} title={f.slug}>
+                                            {f.label}
+                                        </span>
+                                        <span className="mono" style={{ color: 'var(--text-dim)', marginRight: 6 }}>
+                                            {f.units} u × {cached ? cached.nav.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '…'}
+                                        </span>
+                                        <span className="mono" style={{ fontWeight: 600 }}>
+                                            {val != null ? `${Math.round(val).toLocaleString()} ${cur}` : '—'}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            <div className="flex-between mt-2" style={{ borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                                    {(() => {
+                                        const dates = Object.values(goal.placement?.navCache || {}).map(c => new Date(c.fetchedAt));
+                                        if (!dates.length) return 'No data yet';
+                                        const oldest = new Date(Math.min(...dates));
+                                        const h = Math.round((Date.now() - oldest) / 3_600_000);
+                                        return h < 1 ? 'Updated just now' : `Updated ${h}h ago`;
+                                    })()}
+                                </span>
+                                <span className="mono" style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
+                                    {Math.round(placementValue).toLocaleString()} {cur}
+                                </span>
+                            </div>
+                            {navError && (
+                                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--red)', marginTop: 4 }}>{navError}</div>
+                            )}
+                        </div>
+                    )}
 
                     {isPurchasable && (
                         <div className="alert alert-success mt-3" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
@@ -208,6 +317,22 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         <button className="btn btn-sm btn-ghost" onClick={() => setMode('edit')}>
                             <IconEdit /> Edit
                         </button>
+                        {!goal.isBuffer && (
+                            <button
+                                className="btn btn-sm btn-ghost"
+                                onClick={() => {
+                                    setPlacementDraft(
+                                        goal.placement?.funds?.length
+                                            ? goal.placement.funds.map(f => ({ ...f, units: String(f.units) }))
+                                            : [{ slug: '', label: '', units: '' }]
+                                    );
+                                    setMode('placement');
+                                }}
+                                title="Link SICAV/FCP investment"
+                            >
+                                <IconChart /> SICAV
+                            </button>
+                        )}
                         {!goal.isBuffer && (
                             <button
                                 className="btn btn-sm btn-danger btn-icon"
@@ -322,6 +447,95 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                         <IconX />
                     </button>
                 </form>
+            )}
+
+            {mode === 'placement' && placementDraft && (
+                <div className="mt-3" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-3)' }}>
+                    <div className="card-title mb-2"><IconChart /> Link SICAV/FCP Placement</div>
+                    {placementDraft.map((entry, i) => (
+                        <div key={i} className="input-row mb-2">
+                            <select
+                                value={entry.slug}
+                                onChange={e => {
+                                    const fund = TUNISIAN_FUNDS.find(f => f.slug === e.target.value);
+                                    setPlacementDraft(d => d.map((x, j) => j === i
+                                        ? { ...x, slug: e.target.value, label: fund?.label || '' }
+                                        : x
+                                    ));
+                                }}
+                                style={{ flex: 2 }}
+                            >
+                                <option value="">— Select fund —</option>
+                                {TUNISIAN_FUNDS.map(f => (
+                                    <option key={f.slug} value={f.slug}>{f.label}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                placeholder="Units"
+                                value={entry.units}
+                                onChange={e => setPlacementDraft(d => d.map((x, j) => j === i ? { ...x, units: e.target.value } : x))}
+                                style={{ width: 80 }}
+                            />
+                            <button
+                                className="btn btn-sm btn-ghost btn-icon"
+                                type="button"
+                                aria-label="Remove fund"
+                                onClick={() => setPlacementDraft(d => d.filter((_, j) => j !== i))}
+                            >
+                                <IconX />
+                            </button>
+                        </div>
+                    ))}
+                    <button
+                        className="btn btn-sm btn-ghost mb-3"
+                        type="button"
+                        onClick={() => setPlacementDraft(d => [...d, { slug: '', label: '', units: '' }])}
+                    >
+                        <IconPlus /> Add fund
+                    </button>
+                    <div className="flex-between">
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            type="button"
+                            onClick={() => { setMode(null); setPlacementDraft(null); }}
+                        >
+                            <IconX /> Cancel
+                        </button>
+                        <div className="row-tight">
+                            {goal.placement?.funds?.length > 0 && (
+                                <button
+                                    className="btn btn-danger btn-sm"
+                                    type="button"
+                                    onClick={() => {
+                                        dispatch({ type: 'SET_GOAL_PLACEMENT', id: goal.id, placement: null });
+                                        setMode(null); setPlacementDraft(null);
+                                    }}
+                                >
+                                    Remove
+                                </button>
+                            )}
+                            <button
+                                className="btn btn-primary btn-sm"
+                                type="button"
+                                onClick={() => {
+                                    const funds = placementDraft
+                                        .filter(f => f.slug && parseFloat(f.units) > 0)
+                                        .map(f => ({ slug: f.slug, label: f.label, units: parseFloat(f.units) }));
+                                    if (!funds.length) return;
+                                    dispatch({ type: 'SET_GOAL_PLACEMENT', id: goal.id, placement: { funds } });
+                                    setMode(null); setPlacementDraft(null);
+                                    // Fetch NAVs immediately after saving
+                                    setTimeout(() => fetchAllNavs(funds), 50);
+                                }}
+                            >
+                                <IconCheck /> Save & Fetch
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

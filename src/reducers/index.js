@@ -40,6 +40,48 @@ export function rootReducer(state, action) {
       break;
     }
 
+    case 'SET_GOAL_PLACEMENT': {
+      // Sets the SICAV/FCP placement config on a goal. Clears navCache for
+      // removed funds so stale cached NAVs don't linger.
+      const newSlugs = new Set((action.placement?.funds || []).map(f => f.slug));
+      const prevCache = base.goals.find(g => g.id === action.id)?.placement?.navCache || {};
+      const filteredCache = Object.fromEntries(
+        Object.entries(prevCache).filter(([slug]) => newSlugs.has(slug))
+      );
+      next = {
+        ...base,
+        goals: base.goals.map(g => g.id === action.id
+          ? { ...g, placement: action.placement
+              ? { ...action.placement, navCache: filteredCache }
+              : undefined }
+          : g
+        ),
+      };
+      break;
+    }
+
+    case 'UPDATE_NAV_CACHE': {
+      // Stores a freshly fetched NAV for one fund on one goal. Display-only —
+      // never touches financial balances.
+      next = {
+        ...base,
+        goals: base.goals.map(g => {
+          if (g.id !== action.id || !g.placement) return g;
+          return {
+            ...g,
+            placement: {
+              ...g.placement,
+              navCache: {
+                ...(g.placement.navCache || {}),
+                [action.slug]: { nav: action.nav, fetchedAt: new Date().toISOString() },
+              },
+            },
+          };
+        }),
+      };
+      break;
+    }
+
     case 'EDIT_GOAL': {
       const updates = { ...action.updates };
       if (updates.name) updates.name = DOMPurify.sanitize(updates.name);
