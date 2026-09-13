@@ -1,27 +1,13 @@
-// Fetches NAV for Tunisian SICAV/FCP funds.
-// Primary source: millim.tn (doesn't block CORS proxies).
-// Fallback: ilboursa.com (returns 403 to most proxies but kept as last resort).
-// Cache TTL: 24h.
+// NAV fetch strategy (in order):
+// 1. public/nav-data.json  — same-origin static file updated daily by GitHub Actions, no CORS
+// 2. millim.tn via CORS proxies  — fallback if static file missing/stale
+// 3. ilboursa.com via CORS proxies  — last resort (usually 403'd)
 
 import { TUNISIAN_FUNDS } from './tunisianFunds';
 
 const MILLIM_BASE = 'https://www.millim.tn/fund/';
 const ILBOURSA_BASE = 'https://www.ilboursa.com/opcvm/';
 export const NAV_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-// millim.tn: NAV rendered as "23.155TND" or "159.984TND" in SSR HTML.
-// Also check __NEXT_DATA__ JSON blob which Next.js embeds in every page.
-const MILLIM_PATTERNS = [
-  // __NEXT_DATA__ JSON — most reliable
-  /"(?:nav|vl|value|valeur_liquidative)"\s*:\s*([\d.]+)/i,
-  // Direct number+TND in HTML (no space between them)
-  /(\d+\.\d{2,4})TND/,
-  // Number followed by TND within 80 chars (HTML tags in between)
-  /(\d+\.\d{2,4})[^,\d]{0,80}?TND/,
-];
-
-// ilboursa.com: French format "23,07" or "1 234,56" after the heading.
-const ILBOURSA_REGEX = /VALEUR LIQUIDATIVE[\s\S]{0,600}?(\d[\d\s]*,\d+)/;
 
 const PROXIES = [
   {
@@ -35,7 +21,7 @@ const PROXIES = [
     extractHtml: async (res) => {
       const json = await res.json();
       if (json?.status?.http_code && json.status.http_code !== 200)
-        throw new Error(`target returned HTTP ${json.status.http_code}`);
+        throw new Error(`target HTTP ${json.status.http_code}`);
       if (!json?.contents) throw new Error('empty contents');
       return json.contents;
     },
@@ -47,7 +33,14 @@ const PROXIES = [
   },
 ];
 
-async function tryFetch(targetUrl, patterns) {
+const MILLIM_PATTERNS = [
+  /"nav"\s*:\s*([\d.]+)/i,
+  /"vl"\s*:\s*([\d.]+)/i,
+  /([\d]+\.[\d]{2,4})[^,\d]{0,60}TND/,
+];
+const ILBOURSA_REGEX = /VALEUR LIQUIDATIVE[\s\S]{0,600}?(\d[\d\s]*,\d+)/;
+
+async function tryProxies(targetUrl, patterns) {
   const errors = [];
   for (const proxy of PROXIES) {
     try {
@@ -58,7 +51,6 @@ async function tryFetch(targetUrl, patterns) {
       for (const pat of patterns) {
         const m = html.match(pat);
         if (m) {
-          // millim values use period; ilboursa uses comma — normalise both
           const nav = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
           if (Number.isFinite(nav) && nav > 0) return nav;
         }
@@ -75,17 +67,27 @@ export async function fetchNav(slug) {
   const fund = TUNISIAN_FUNDS.find(f => f.slug === slug);
   const allErrors = [];
 
-  // 1. Try millim.tn first (doesn't block CORS proxies)
+  // 1. Static JSON (same-origin, deployed by GitHub Actions daily — no CORS)
+  try {
+    const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) ?? '/';
+    const res = await fetch(`${base}nav-data.json`, { cache: 'no-cache', signal: AbortSignal.timeout(5_000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data[slug]?.nav) return Number(data[slug].nav);
+    }
+  } catch (_) {}
+
+  // 2. millim.tn via CORS proxies
   if (fund?.millimSlug) {
-    const result = await tryFetch(`${MILLIM_BASE}${fund.millimSlug}/`, MILLIM_PATTERNS);
+    const result = await tryProxies(`${MILLIM_BASE}${fund.millimSlug}/`, MILLIM_PATTERNS);
     if (typeof result === 'number') return result;
-    allErrors.push(...result.errors.map(e => `millim: ${e}`));
+    allErrors.push(...result.errors.map(e => `millim:${e}`));
   }
 
-  // 2. Fall back to ilboursa.com
-  const result = await tryFetch(`${ILBOURSA_BASE}${slug}`, [ILBOURSA_REGEX]);
+  // 3. ilboursa.com via CORS proxies
+  const result = await tryProxies(`${ILBOURSA_BASE}${slug}`, [ILBOURSA_REGEX]);
   if (typeof result === 'number') return result;
-  allErrors.push(...result.errors.map(e => `ilboursa: ${e}`));
+  allErrors.push(...result.errors.map(e => `ilboursa:${e}`));
 
   throw new Error(allErrors.join(' | '));
 }
