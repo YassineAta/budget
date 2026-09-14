@@ -57,11 +57,11 @@ export function rootReducer(state, action) {
       );
       next = {
         ...base,
+        cash: nn(r2(base.cash - investDelta)),
         goals: base.goals.map(g => {
           if (g.id !== action.id) return g;
           return {
             ...g,
-            saved: nn(r2(g.saved - investDelta)),
             placement: action.placement
               ? { ...action.placement, navCache: filteredCache }
               : undefined,
