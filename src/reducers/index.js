@@ -41,21 +41,32 @@ export function rootReducer(state, action) {
     }
 
     case 'SET_GOAL_PLACEMENT': {
-      // Sets the SICAV/FCP placement config on a goal. Clears navCache for
-      // removed funds so stale cached NAVs don't linger.
+      // Sets the SICAV/FCP placement config on a goal. Adjusts goal.saved by the
+      // delta in costBasis (TND paid) so cash committed to SICAV leaves the goal
+      // balance. Clears navCache for removed funds so stale NAVs don't linger.
+      const prevGoal = base.goals.find(g => g.id === action.id);
+      if (!prevGoal) return base;
+      const oldInvested = (prevGoal.placement?.funds || []).reduce((s, f) => s + (f.costBasis || 0), 0);
+      const newInvested = (action.placement?.funds || []).reduce((s, f) => s + (f.costBasis || 0), 0);
+      const investDelta = r2(newInvested - oldInvested);
+
       const newSlugs = new Set((action.placement?.funds || []).map(f => f.slug));
-      const prevCache = base.goals.find(g => g.id === action.id)?.placement?.navCache || {};
+      const prevCache = prevGoal.placement?.navCache || {};
       const filteredCache = Object.fromEntries(
         Object.entries(prevCache).filter(([slug]) => newSlugs.has(slug))
       );
       next = {
         ...base,
-        goals: base.goals.map(g => g.id === action.id
-          ? { ...g, placement: action.placement
+        goals: base.goals.map(g => {
+          if (g.id !== action.id) return g;
+          return {
+            ...g,
+            saved: nn(r2(g.saved - investDelta)),
+            placement: action.placement
               ? { ...action.placement, navCache: filteredCache }
-              : undefined }
-          : g
-        ),
+              : undefined,
+          };
+        }),
       };
       break;
     }

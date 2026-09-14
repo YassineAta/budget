@@ -339,8 +339,8 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                 onClick={() => {
                                     setPlacementDraft(
                                         goal.placement?.funds?.length
-                                            ? goal.placement.funds.map(f => ({ ...f, units: String(f.units) }))
-                                            : [{ slug: '', label: '', units: '' }]
+                                            ? goal.placement.funds.map(f => ({ ...f, units: String(f.units), costBasis: String(f.costBasis || '') }))
+                                            : [{ slug: '', label: '', units: '', costBasis: '' }]
                                     );
                                     setMode('placement');
                                 }}
@@ -512,6 +512,20 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                         style={{ flex: 1 }}
                                     />
                                 </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                                    <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                        Paid ({cur})
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        placeholder="Amount you paid"
+                                        value={entry.costBasis}
+                                        onChange={e => setPlacementDraft(d => d.map((x, j) => j === i ? { ...x, costBasis: e.target.value } : x))}
+                                        style={{ flex: 1 }}
+                                    />
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -519,7 +533,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                     <button
                         className="btn btn-sm btn-ghost mt-3"
                         type="button"
-                        onClick={() => setPlacementDraft(d => [...d, { slug: '', label: '', units: '' }])}
+                        onClick={() => setPlacementDraft(d => [...d, { slug: '', label: '', units: '', costBasis: '' }])}
                     >
                         <IconPlus /> Add another fund
                     </button>
@@ -551,7 +565,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                 onClick={() => {
                                     const funds = placementDraft
                                         .filter(f => f.slug && parseFloat(f.units) > 0)
-                                        .map(f => ({ slug: f.slug, label: f.label, units: parseFloat(f.units) }));
+                                        .map(f => ({ slug: f.slug, label: f.label, units: parseFloat(f.units), costBasis: parseFloat(f.costBasis) || 0 }));
                                     if (!funds.length) return;
                                     dispatch({ type: 'SET_GOAL_PLACEMENT', id: goal.id, placement: { funds } });
                                     setMode(null); setPlacementDraft(null);
