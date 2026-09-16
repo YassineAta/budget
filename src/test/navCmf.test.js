@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { readFirstSheet } from '../../scripts/xlsx-lite.mjs';
 import { parseListing, extractNavs } from '../../scripts/fetch-nav.mjs';
 import { TUNISIAN_FUNDS } from '../utils/tunisianFunds';
 
-const fixture = new URL('./fixtures/cmf-vl-2026-09-15.xlsx', import.meta.url);
+const fixture = join(process.cwd(), 'src/test/fixtures/cmf-vl-2026-09-15.xlsx');
 
 describe('CMF NAV pipeline', () => {
   it('reads every tracked fund from the real CMF daily Excel', () => {

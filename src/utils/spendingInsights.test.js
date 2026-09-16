@@ -242,3 +242,22 @@ describe('getSpendingInsights', () => {
     expect(ins.anomalies).toEqual([]);
   });
 });
+
+describe('goal purchases are not spending', () => {
+  const asOf = new Date('2026-09-16T12:00:00Z');
+  const expenses = [
+    { id: 'a', name: 'Internet', amount: 66, date: '2026-09-10' },
+    { id: 'b', name: 'inscription', amount: 72, date: '2026-09-03' },
+    { id: 'c', name: '2x multiprise de 5', amount: 35, date: '2026-09-03' },
+    { id: 'd', name: 'Purchased: plein voiture', amount: 120, date: '2026-09-16', isPurchase: true },
+    { id: 'e', name: 'Purchased: iptv mima', amount: 61, date: '2026-09-12', isPurchase: true },
+  ];
+
+  it('excludes isPurchase entries from month totals, categories and insights', () => {
+    expect(groupByMonth(expenses)['2026-09'].total).toBe(173);
+    const cats = getCategoryBreakdown(expenses, { asOf });
+    expect(cats.reduce((s, c) => s + c.total, 0)).toBe(173);
+    const insights = getSpendingInsights({ monthly: { expenses, budget: 200 } }, asOf);
+    expect(insights.series.at(-1).total).toBe(173);
+  });
+});

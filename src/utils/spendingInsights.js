@@ -40,11 +40,18 @@ export function categorize(expense) {
   return 'Other';
 }
 
+/**
+ * Goal purchases (`isPurchase`) stay in the ledger for history but are paid from
+ * goal savings, not the monthly budget — they are never "spending" for analytics.
+ * Same rule as `monthly.spent` (reducers/index.js).
+ */
+const isSpend = (e) => !!e && !e.isPurchase && typeof e.date === 'string';
+
 /** Bucket expenses by UTC month → { month, total, count, items }. */
 export function groupByMonth(expenses = []) {
   const map = {};
   for (const e of expenses) {
-    if (!e || typeof e.date !== 'string') continue;
+    if (!isSpend(e)) continue;
     const k = e.date.slice(0, 7);
     if (!map[k]) map[k] = { month: k, total: 0, count: 0, items: [] };
     map[k].total = round2(map[k].total + (Number(e.amount) || 0));
@@ -173,7 +180,7 @@ export function getCategoryBreakdown(expenses, opts = {}) {
   const key = month || new Date(asOf).toISOString().slice(0, 7);
   const map = {};
   for (const e of expenses) {
-    if (!e || typeof e.date !== 'string' || e.date.slice(0, 7) !== key) continue;
+    if (!isSpend(e) || e.date.slice(0, 7) !== key) continue;
     const cat = categorize(e);
     if (!map[cat]) map[cat] = { category: cat, total: 0, count: 0 };
     map[cat].total = round2(map[cat].total + (Number(e.amount) || 0));
@@ -199,7 +206,7 @@ export function getAnomalies(expenses, opts = {}) {
   const currentByCat = {};
   const priorSumByCat = {};
   for (const e of expenses) {
-    if (!e || typeof e.date !== 'string') continue;
+    if (!isSpend(e)) continue;
     const k = e.date.slice(0, 7);
     const amt = Number(e.amount) || 0;
     const cat = categorize(e);
