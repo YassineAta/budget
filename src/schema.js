@@ -25,6 +25,7 @@ export const goalSchema = z.object({
     })),
     navCache: z.record(z.string(), z.object({
       nav: z.number().min(0),
+      navDate: z.string().optional(),
       fetchedAt: z.string(),
     })).optional(),
   }).optional(),

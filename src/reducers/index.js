@@ -84,7 +84,11 @@ export function rootReducer(state, action) {
               ...g.placement,
               navCache: {
                 ...(g.placement.navCache || {}),
-                [action.slug]: { nav: action.nav, fetchedAt: new Date().toISOString() },
+                [action.slug]: {
+                  nav: action.nav,
+                  ...(action.navDate ? { navDate: action.navDate } : {}),
+                  fetchedAt: new Date().toISOString(),
+                },
               },
             },
           };

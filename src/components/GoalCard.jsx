@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { useStore, getMonthlySaving, formatTargetDate, toDateInputValue } from '../store';
 import ProgressBar from './ProgressBar';
 import { calculateProgress } from '../utils/math';
-import { fetchNav, isNavStale } from '../utils/navFetcher';
+import { fetchNav } from '../utils/navFetcher';
 import { TUNISIAN_FUNDS } from '../utils/tunisianFunds';
 import {
     IconShield, IconTarget, IconHeart, IconCalendar, IconCart,
@@ -119,22 +119,20 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
         const failed = [];
         await Promise.all(targets.map(async f => {
             try {
-                const nav = await fetchNav(f.slug);
-                dispatch({ type: 'UPDATE_NAV_CACHE', id: goal.id, slug: f.slug, nav });
+                const { nav, navDate } = await fetchNav(f.slug);
+                dispatch({ type: 'UPDATE_NAV_CACHE', id: goal.id, slug: f.slug, nav, navDate });
             } catch (e) {
                 console.error(`[NAV] ${f.label}:`, e.message);
                 failed.push(f.label);
             }
         }));
         setNavLoading(false);
-        if (failed.length) setNavError(`Couldn't fetch: ${failed.join(', ')}. Check console for details.`);
+        if (failed.length) setNavError(`No CMF NAV for: ${failed.join(', ')}.`);
     }
 
-    // Auto-refresh stale NAVs on mount (once per component lifetime).
+    // Refresh NAVs on mount (once per component lifetime) — a single cheap same-origin JSON read.
     useEffect(() => {
         if (autoFetched.current || !goal.placement?.funds?.length) return;
-        const stale = goal.placement.funds.some(f => isNavStale(goal.placement?.navCache?.[f.slug]?.fetchedAt));
-        if (!stale) return;
         autoFetched.current = true;
         fetchAllNavs(goal.placement.funds);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -229,7 +227,7 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                                     className="btn btn-ghost btn-icon btn-sm"
                                     onClick={() => fetchAllNavs()}
                                     disabled={navLoading}
-                                    title="Refresh NAV from millim.tn"
+                                    title="Refresh NAV (CMF daily data)"
                                     style={{ color: 'var(--text-dim)' }}
                                 >
                                     {navLoading
@@ -265,11 +263,16 @@ const GoalCard = memo(function GoalCard({ goal, compact = false }) {
                             <div className="flex-between" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-2)', borderTop: '1px solid rgba(107,140,175,0.18)' }}>
                                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-dim)' }}>
                                     {(() => {
-                                        const dates = Object.values(goal.placement?.navCache || {}).map(c => new Date(c.fetchedAt));
-                                        if (!dates.length) return 'No data yet — click ↻';
-                                        const oldest = new Date(Math.min(...dates));
+                                        const entries = Object.values(goal.placement?.navCache || {});
+                                        if (!entries.length) return 'No data yet — click ↻';
+                                        const navDates = entries.map(c => c.navDate).filter(Boolean).sort();
+                                        if (navDates.length) {
+                                            const [y, m, d] = navDates[0].split('-');
+                                            return `NAV of ${d}/${m}/${y} · CMF`;
+                                        }
+                                        const oldest = Math.min(...entries.map(c => new Date(c.fetchedAt)));
                                         const h = Math.round((Date.now() - oldest) / 3_600_000);
-                                        return h < 1 ? 'Updated just now · millim.tn' : `Updated ${h}h ago · millim.tn`;
+                                        return h < 1 ? 'Updated just now · CMF' : `Updated ${h}h ago · CMF`;
                                     })()}
                                 </span>
                                 <span className="mono" style={{ fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--blue)' }}>
