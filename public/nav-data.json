@@ -1,32 +1,32 @@
 {
   "attijari-fcp-cea_TNILB0000035": {
-    "nav": 27.797,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "nav": 27.267,
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   },
   "btk-sicav": {
-    "nav": 139.934,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "nav": 139.955,
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   },
   "fcp-biat-epargne-actions_TNILB0000014": {
-    "nav": 127.398,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "nav": 125.983,
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   },
   "fcp-prosper-plus-cea": {
     "nav": 20.634,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   },
   "poste-obligataire-sicav-tanit_TNILB0000044": {
-    "nav": 160.31,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "nav": 160.338,
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   },
   "tuniso-emiratie-sicav": {
-    "nav": 121.701,
-    "navDate": "2026-09-23",
-    "fetchedAt": "2026-09-23T18:19:24.968Z"
+    "nav": 121.721,
+    "navDate": "2026-09-24",
+    "fetchedAt": "2026-09-24T18:20:22.425Z"
   }
 }
